@@ -5,7 +5,7 @@ services:
       dockerfile: docker/Dockerfile
     container_name: belegsync
     ports:
-      - "127.0.0.1:8470:8000"
+      - "8480:8000"
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
