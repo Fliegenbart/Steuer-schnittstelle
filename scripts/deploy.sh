@@ -42,8 +42,11 @@ echo "  ✓ Ollama läuft"
 
 # Prüfe ob Llama-Modell geladen ist
 if ! curl -sf http://localhost:11434/api/tags | grep -q "llama3.1"; then
-    echo "  ⚠ Llama 3.1 Modell nicht gefunden – ziehe es jetzt..."
-    ollama pull llama3.1:8b-instruct-q4_K_M
+    echo "  ⚠ Llama 3.1 Modell nicht gefunden – ziehe es jetzt (kann 5-10 Min dauern)..."
+    curl -f http://localhost:11434/api/pull -d '{"name": "llama3.1:8b-instruct-q4_K_M"}' || {
+        echo "  ✗ Modell-Download fehlgeschlagen"
+        exit 1
+    }
 fi
 echo "  ✓ Llama 3.1 8B Modell verfügbar"
 
