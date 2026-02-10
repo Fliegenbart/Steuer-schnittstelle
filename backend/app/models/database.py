@@ -95,6 +95,7 @@ class Beleg(Base):
     # Steuer-Kategorie (EStE / betrieblich)
     steuer_kategorie = Column(String(100))
     paragraph_35a_anteil = Column(Float)  # Arbeitskosten §35a
+    materialkosten = Column(Float)  # Materialkosten (nicht absetzbar)
 
     # DATEV Sync
     datev_sync_status = Column(String(50))  # pending | synced | error

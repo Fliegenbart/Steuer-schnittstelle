@@ -38,6 +38,7 @@ def _langextract_examples():
                     "mwst_satz": "19", "mwst_betrag": "292.60",
                     "datum_beleg": "15.03.2024",
                     "arbeitskosten_35a": "1200.00",
+                    "materialkosten": "340.00",
                     "steuer_kategorie": "Handwerkerleistungen §35a",
                     "skr03_konto": "4946", "rechnungsnummer": "2024-0815"
                 }
@@ -87,6 +88,7 @@ def _langextract_examples():
                     "datum_beleg": "2024",
                     "steuer_kategorie": "Haushaltsnahe Dienstleistungen §35a",
                     "arbeitskosten_35a": "1320.00",
+                    "materialkosten": "325.00",
                     "nachzahlung": "145.00"
                 }
             )]
@@ -110,6 +112,7 @@ async def extract_with_langextract(ocr_text: str) -> Optional[dict]:
         "Analysiere diesen deutschen Steuerbeleg und extrahiere alle steuerlich relevanten Informationen. "
         "Identifiziere: Belegtyp, Aussteller, Beträge (brutto/netto/MwSt), Datum, steuerliche Kategorie, "
         "SKR03-Konto, Rechnungsnummer, und ob §35a-Arbeitskosten enthalten sind. "
+        "Bei Handwerkerrechnungen: trenne Arbeitskosten (§35a) von Materialkosten. "
         "Deutsche Zahlenformate: 1.234,56 → im Output als 1234.56"
     )
 
@@ -178,9 +181,11 @@ NUR valides JSON, kein anderer Text:
   "steuer_kategorie": "Werbungskosten|Sonderausgaben|Außergewöhnliche Belastungen|Haushaltsnahe Dienstleistungen §35a|Handwerkerleistungen §35a|Vorsorgeaufwendungen|Spenden und Mitgliedsbeiträge|Einkünfte nichtselbständige Arbeit",
   "skr03_konto": "4-stellig",
   "arbeitskosten_35a": 0.00,
+  "materialkosten": 0.00,
   "konfidenz": "hoch|mittel|niedrig"
 }}
 
+Wichtig: Bei Handwerkerrechnungen und Nebenkostenabrechnungen trenne Arbeitskosten (§35a absetzbar) von Materialkosten (nicht absetzbar). arbeitskosten_35a = nur Lohn-/Arbeitsanteil. materialkosten = Material, Verbrauchsstoffe, Entsorgung etc.
 Deutsche Zahlen: 1.234,56 → 1234.56 im JSON. Unbekannte Felder: null.
 
 OCR-TEXT:
@@ -235,6 +240,7 @@ def _build_source_spans(ocr_text: str, attrs: dict) -> list:
         "datum_beleg": attrs.get("datum_beleg"),
         "rechnungsnummer": attrs.get("rechnungsnummer"),
         "arbeitskosten_35a": attrs.get("arbeitskosten_35a"),
+        "materialkosten": attrs.get("materialkosten"),
     }
 
     for feld, value in search_fields.items():

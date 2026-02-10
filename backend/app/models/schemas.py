@@ -100,6 +100,7 @@ class BelegResponse(BaseModel):
     kostenstelle: Optional[str] = None
     steuer_kategorie: Optional[str] = None
     paragraph_35a_anteil: Optional[float] = None
+    materialkosten: Optional[float] = None
     datev_sync_status: Optional[str] = None
     datev_sync_at: Optional[datetime] = None
     manuell_geprueft: bool = False
@@ -129,6 +130,7 @@ class BelegUpdate(BaseModel):
     kostenstelle: Optional[str] = None
     steuer_kategorie: Optional[str] = None
     paragraph_35a_anteil: Optional[float] = None
+    materialkosten: Optional[float] = None
     manuell_geprueft: Optional[bool] = None
     pruefnotiz: Optional[str] = None
 

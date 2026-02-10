@@ -359,6 +359,14 @@ tr { cursor: pointer; }
   background: rgba(245,158,11,0.2);
   border-color: var(--warning);
 }
+.ocr-highlight[data-feld="arbeitskosten_35a"] {
+  background: rgba(16,185,129,0.15);
+  border-color: var(--success);
+}
+.ocr-highlight[data-feld="materialkosten"] {
+  background: rgba(245,158,11,0.15);
+  border-color: var(--warning);
+}
 .extraction-panel {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -1012,7 +1020,8 @@ async function openBeleg(id) {
     ['Gegenkonto', b.gegenkonto],
     ['BU-Schlüssel', b.bu_schluessel],
     ['Steuer-Kategorie', b.steuer_kategorie],
-    ['§35a-Anteil', b.paragraph_35a_anteil != null ? fmt(b.paragraph_35a_anteil) + ' €' : null],
+    ['§35a Arbeitskosten', b.paragraph_35a_anteil != null ? fmt(b.paragraph_35a_anteil) + ' €' : null],
+    ['Materialkosten', b.materialkosten != null ? fmt(b.materialkosten) + ' €' : null],
   ];
 
   const groundedFields = new Set((b.quellreferenzen || []).map(s => s.feld).filter(Boolean));
@@ -1040,6 +1049,8 @@ async function openBeleg(id) {
         <span>🔵 Aussteller</span>
         <span style="color:var(--success);">🟢 Betrag</span>
         <span style="color:var(--purple);">🟣 Datum</span>
+        <span style="color:var(--success);">● Arbeitskosten</span>
+        <span style="color:var(--warning);">● Materialkosten</span>
         <span style="color:var(--accent);">● Sonstiges</span>
       </div>
     </div>

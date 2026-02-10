@@ -105,7 +105,7 @@ def _map_fields(beleg: Beleg, data: dict):
             setattr(beleg, dst, str(val))
 
     # Numeric fields
-    for field in ["betrag_brutto", "betrag_netto", "mwst_satz", "mwst_betrag", "arbeitskosten_35a"]:
+    for field in ["betrag_brutto", "betrag_netto", "mwst_satz", "mwst_betrag", "arbeitskosten_35a", "materialkosten"]:
         val = data.get(field)
         if val and val != "null":
             try:
