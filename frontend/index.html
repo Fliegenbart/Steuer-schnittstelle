@@ -1,13 +1,55 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BelegSync – KI-Belegverarbeitung</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+/* ── Light Mode (Default) ──────────────────────── */
 :root {
+  --bg: #F5F7FA;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F0F4F8;
+  --bg-input: #F0F2F5;
+  --border: #E2E8F0;
+  --border-focus: #2563EB;
+  --text: #1A1D23;
+  --text-dim: #64748B;
+  --text-muted: #94A3B8;
+  --accent: #2563EB;
+  --accent-light: #3B82F6;
+  --accent-glow: rgba(37, 99, 235, 0.10);
+  --success: #059669;
+  --success-light: rgba(5, 150, 105, 0.10);
+  --warning: #D97706;
+  --warning-light: rgba(217, 119, 6, 0.10);
+  --danger: #DC2626;
+  --danger-light: rgba(220, 38, 38, 0.10);
+  --purple: #7C3AED;
+  --purple-light: rgba(124, 58, 237, 0.10);
+  --pink: #EC4899;
+  --pink-light: rgba(236, 72, 153, 0.10);
+  --datev-green: #3CAA5F;
+  --datev-green-light: rgba(60, 170, 95, 0.10);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 6px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', monospace;
+  --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --sidebar-bg: #FFFFFF;
+  --sidebar-border: #E2E8F0;
+  --topbar-bg: rgba(255,255,255,0.85);
+  --modal-overlay: rgba(0,0,0,0.3);
+}
+
+/* ── Dark Mode ─────────────────────────────────── */
+html[data-theme="dark"] {
   --bg: #0B0E11;
   --bg-card: #141922;
   --bg-card-hover: #1A2130;
@@ -18,18 +60,21 @@
   --text-dim: #7A8699;
   --text-muted: #4A5568;
   --accent: #3B82F6;
+  --accent-light: #60A5FA;
   --accent-glow: rgba(59, 130, 246, 0.15);
-  --success: #10B981;
-  --warning: #F59E0B;
-  --danger: #EF4444;
-  --purple: #8B5CF6;
-  --datev-green: #3CAA5F;
-  --radius: 10px;
-  --radius-sm: 6px;
+  --success-light: rgba(5, 150, 105, 0.15);
+  --warning-light: rgba(217, 119, 6, 0.15);
+  --danger-light: rgba(220, 38, 38, 0.15);
+  --purple-light: rgba(124, 58, 237, 0.15);
+  --pink-light: rgba(236, 72, 153, 0.15);
+  --datev-green-light: rgba(60, 170, 95, 0.15);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
   --shadow: 0 2px 12px rgba(0,0,0,0.4);
-  --font: 'DM Sans', -apple-system, sans-serif;
-  --mono: 'JetBrains Mono', monospace;
-  --transition: 180ms ease;
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.5);
+  --sidebar-bg: #141922;
+  --sidebar-border: #1E2736;
+  --topbar-bg: rgba(20,25,34,0.85);
+  --modal-overlay: rgba(0,0,0,0.7);
 }
 
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -40,19 +85,22 @@ body {
   color: var(--text);
   min-height: 100vh;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ── Layout ─────────────────────────── */
 .app { display: flex; min-height: 100vh; }
 .sidebar {
   width: 260px;
-  background: var(--bg-card);
-  border-right: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
   display: flex;
   flex-direction: column;
   position: fixed;
   top: 0; left: 0; bottom: 0;
   z-index: 100;
+  box-shadow: var(--shadow-sm);
 }
 .main { flex:1; margin-left: 260px; }
 .topbar {
@@ -62,77 +110,108 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 28px;
-  background: var(--bg-card);
+  background: var(--topbar-bg);
   position: sticky;
   top: 0; z-index: 50;
   backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 .content { padding: 28px; max-width: 1400px; }
 
 /* ── Sidebar ────────────────────────── */
 .logo {
-  padding: 20px 22px 16px;
+  padding: 22px 22px 18px;
   border-bottom: 1px solid var(--border);
 }
 .logo h1 {
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.2rem;
+  font-weight: 800;
   letter-spacing: -0.5px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  color: var(--text);
 }
-.logo h1 .icon { font-size: 1.4rem; }
+.logo-icon {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
 .logo .sub {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: var(--text-dim);
-  margin-top: 4px;
+  margin-top: 3px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  font-weight: 500;
 }
-.nav { flex:1; padding: 12px 10px; overflow-y: auto; }
+.nav { flex:1; padding: 14px 12px; overflow-y: auto; }
 .nav-section {
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 1.2px;
-  padding: 16px 12px 6px;
+  padding: 18px 12px 6px;
   font-weight: 600;
 }
 .nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
+  padding: 10px 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text-dim);
   font-size: 0.88rem;
   font-weight: 500;
   transition: all var(--transition);
-  margin: 1px 0;
+  margin: 2px 0;
+  border-left: 3px solid transparent;
+  position: relative;
 }
 .nav-item:hover { background: var(--bg-card-hover); color: var(--text); }
-.nav-item.active { background: var(--accent-glow); color: var(--accent); }
+.nav-item.active {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+.nav-item .nav-icon {
+  width: 20px; height: 20px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.nav-item.active .nav-icon { opacity: 1; }
 .nav-item .badge {
   margin-left: auto;
   background: var(--accent);
   color: #fff;
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   padding: 2px 7px;
   border-radius: 99px;
-  font-weight: 600;
+  font-weight: 700;
+  min-width: 20px;
+  text-align: center;
 }
 .datev-status {
-  padding: 14px 16px;
+  padding: 16px 18px;
   border-top: 1px solid var(--border);
   font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .datev-dot {
   display: inline-block;
   width: 8px; height: 8px;
   border-radius: 50%;
-  margin-right: 6px;
+  flex-shrink: 0;
 }
 .datev-dot.connected { background: var(--datev-green); box-shadow: 0 0 6px var(--datev-green); }
 .datev-dot.disconnected { background: var(--text-muted); }
@@ -148,10 +227,26 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px 20px;
+  padding: 20px 22px;
   transition: all var(--transition);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
 }
-.stat-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.stat-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--accent);
+  border-radius: 0 4px 4px 0;
+}
+.stat-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
+.stat-card.success::before { background: var(--success); }
+.stat-card.warning::before { background: var(--warning); }
+.stat-card.danger::before { background: var(--danger); }
+.stat-card.datev::before { background: var(--datev-green); }
+.stat-card.purple::before { background: var(--purple); }
 .stat-label {
   font-size: 0.72rem;
   color: var(--text-dim);
@@ -160,35 +255,38 @@ body {
   font-weight: 600;
 }
 .stat-value {
-  font-size: 1.7rem;
-  font-weight: 700;
-  margin-top: 4px;
+  font-size: 2rem;
+  font-weight: 800;
+  margin-top: 6px;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -1px;
 }
-.stat-sub { font-size: 0.78rem; color: var(--text-dim); margin-top: 2px; }
+.stat-sub { font-size: 0.78rem; color: var(--text-dim); margin-top: 4px; }
 
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 .card-header {
-  padding: 16px 20px;
+  padding: 16px 22px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   font-weight: 600;
+  font-size: 0.92rem;
 }
-.card-body { padding: 20px; }
+.card-body { padding: 20px 22px; }
 
 /* ── Buttons ────────────────────────── */
 .btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 9px 18px;
   border-radius: var(--radius-sm);
   font-family: var(--font);
   font-size: 0.84rem;
@@ -196,13 +294,14 @@ body {
   border: 1px solid transparent;
   cursor: pointer;
   transition: all var(--transition);
+  white-space: nowrap;
 }
 .btn-primary {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
 }
-.btn-primary:hover { background: #2563EB; box-shadow: 0 0 20px var(--accent-glow); }
+.btn-primary:hover { background: #1D4ED8; box-shadow: 0 4px 12px var(--accent-glow); }
 .btn-success { background: var(--datev-green); color: #fff; }
 .btn-success:hover { background: #2F9651; }
 .btn-ghost {
@@ -210,15 +309,16 @@ body {
   color: var(--text-dim);
   border-color: var(--border);
 }
-.btn-ghost:hover { color: var(--text); border-color: var(--text-dim); }
+.btn-ghost:hover { color: var(--text); border-color: var(--text-muted); background: var(--bg-card-hover); }
 .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
-.btn-sm { padding: 5px 10px; font-size: 0.76rem; }
+.btn-danger:hover { background: var(--danger-light); }
+.btn-sm { padding: 6px 12px; font-size: 0.76rem; }
 
 /* ── Forms ──────────────────────────── */
 .form-group { margin-bottom: 14px; }
 .form-label {
   display: block;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 600;
   color: var(--text-dim);
   margin-bottom: 5px;
@@ -227,14 +327,15 @@ body {
 }
 .form-input, .form-select {
   width: 100%;
-  padding: 9px 12px;
+  padding: 9px 14px;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
   font-family: var(--font);
   font-size: 0.88rem;
-  transition: border-color var(--transition);
+  transition: all var(--transition);
+  -webkit-appearance: none;
 }
 .form-input:focus, .form-select:focus {
   outline: none;
@@ -251,28 +352,29 @@ table {
 }
 th {
   text-align: left;
-  padding: 10px 14px;
-  font-size: 0.72rem;
+  padding: 12px 16px;
+  font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   color: var(--text-muted);
   font-weight: 600;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 2px solid var(--border);
+  background: var(--bg-card);
 }
 td {
-  padding: 11px 14px;
+  padding: 13px 16px;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 tr:hover td { background: var(--bg-card-hover); }
-tr { cursor: pointer; }
+tr { cursor: pointer; transition: background var(--transition); }
 
 /* ── Status Badges ──────────────────── */
 .badge-status {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 9px;
+  padding: 4px 10px;
   border-radius: 99px;
   font-size: 0.72rem;
   font-weight: 600;
@@ -281,23 +383,32 @@ tr { cursor: pointer; }
   content: '';
   width: 6px; height: 6px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
-.badge-hochgeladen { background: rgba(107,114,128,0.15); color: #9CA3AF; }
-.badge-hochgeladen::before { background: #9CA3AF; }
-.badge-ocr_laeuft, .badge-extraktion_laeuft { background: rgba(59,130,246,0.12); color: var(--accent); }
+.badge-hochgeladen { background: rgba(148,163,184,0.12); color: #64748B; }
+.badge-hochgeladen::before { background: #94A3B8; }
+.badge-ocr_laeuft, .badge-extraktion_laeuft { background: var(--accent-glow); color: var(--accent); }
 .badge-ocr_laeuft::before, .badge-extraktion_laeuft::before { background: var(--accent); animation: pulse 1.5s infinite; }
-.badge-extrahiert { background: rgba(245,158,11,0.12); color: var(--warning); }
+.badge-extrahiert { background: var(--warning-light); color: var(--warning); }
 .badge-extrahiert::before { background: var(--warning); }
-.badge-geprueft { background: rgba(16,185,129,0.12); color: var(--success); }
+.badge-geprueft { background: var(--success-light); color: var(--success); }
 .badge-geprueft::before { background: var(--success); }
-.badge-an_datev { background: rgba(60,170,95,0.12); color: var(--datev-green); }
+.badge-an_datev { background: var(--datev-green-light); color: var(--datev-green); }
 .badge-an_datev::before { background: var(--datev-green); }
-.badge-fehler { background: rgba(239,68,68,0.12); color: var(--danger); }
+.badge-fehler { background: var(--danger-light); color: var(--danger); }
 .badge-fehler::before { background: var(--danger); }
 
-.konfidenz-hoch { color: var(--success); }
-.konfidenz-mittel { color: var(--warning); }
-.konfidenz-niedrig { color: var(--danger); }
+.konfidenz-hoch { color: var(--success); font-weight: 600; }
+.konfidenz-mittel { color: var(--warning); font-weight: 600; }
+.konfidenz-niedrig { color: var(--danger); font-weight: 600; }
+
+.konfidenz-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}
 
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
@@ -305,18 +416,30 @@ tr { cursor: pointer; }
 .dropzone {
   border: 2px dashed var(--border);
   border-radius: var(--radius);
-  padding: 40px;
+  padding: 48px 40px;
   text-align: center;
   cursor: pointer;
   transition: all var(--transition);
-  background: var(--bg-input);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
 }
 .dropzone:hover, .dropzone.dragover {
   border-color: var(--accent);
   background: var(--accent-glow);
+  box-shadow: 0 0 0 4px var(--accent-glow);
 }
-.dropzone .icon { font-size: 2.4rem; margin-bottom: 8px; }
+.dropzone-icon {
+  width: 48px; height: 48px;
+  margin: 0 auto 12px;
+  border-radius: 12px;
+  background: var(--accent-glow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dropzone-icon svg { width: 24px; height: 24px; color: var(--accent); }
 .dropzone p { color: var(--text-dim); font-size: 0.88rem; }
+.dropzone .drop-hint { font-size: 0.76rem; margin-top: 6px; color: var(--text-muted); }
 
 /* ── Source Grounding View ──────────── */
 .source-view {
@@ -324,90 +447,189 @@ tr { cursor: pointer; }
   grid-template-columns: 1fr 1fr;
   gap: 20px;
   margin-top: 16px;
+  position: relative;
 }
 .ocr-panel {
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px;
-  max-height: 500px;
+  padding: 18px;
+  max-height: 520px;
   overflow-y: auto;
   font-family: var(--mono);
   font-size: 0.78rem;
-  line-height: 1.7;
+  line-height: 1.8;
   white-space: pre-wrap;
   word-break: break-word;
-}
-.ocr-highlight {
-  background: rgba(59,130,246,0.2);
-  border-bottom: 2px solid var(--accent);
-  padding: 1px 3px;
-  border-radius: 2px;
-  cursor: help;
   position: relative;
 }
+
+/* Source Grounding Highlights */
+.ocr-highlight {
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+  border-bottom: 2px solid;
+}
+.ocr-highlight:hover { filter: brightness(0.95); }
+
+/* Dimmed state when a field is selected */
+.ocr-highlight.dimmed { opacity: 0.25; }
+.ocr-highlight.active-highlight {
+  animation: highlightPulse 1.5s ease-in-out 2;
+  box-shadow: 0 0 8px currentColor;
+}
+
+@keyframes highlightPulse {
+  0%, 100% { box-shadow: 0 0 4px currentColor; }
+  50% { box-shadow: 0 0 16px currentColor; }
+}
+
+/* Per-Feld Farben */
+.ocr-highlight[data-feld="aussteller"] {
+  background: rgba(37,99,235,0.12); border-color: var(--accent);
+}
 .ocr-highlight[data-feld="betrag_brutto"],
-.ocr-highlight[data-feld="betrag_netto"] {
-  background: rgba(16,185,129,0.2);
-  border-color: var(--success);
+.ocr-highlight[data-feld="betrag_netto"],
+.ocr-highlight[data-feld="mwst_betrag"] {
+  background: var(--success-light); border-color: var(--success);
 }
 .ocr-highlight[data-feld="datum_beleg"] {
-  background: rgba(139,92,246,0.2);
-  border-color: var(--purple);
+  background: var(--purple-light); border-color: var(--purple);
 }
-.ocr-highlight[data-feld="aussteller"] {
-  background: rgba(245,158,11,0.2);
-  border-color: var(--warning);
+.ocr-highlight[data-feld="rechnungsnummer"] {
+  background: var(--pink-light); border-color: var(--pink);
 }
 .ocr-highlight[data-feld="arbeitskosten_35a"] {
-  background: rgba(16,185,129,0.15);
-  border-color: var(--success);
+  background: var(--datev-green-light); border-color: var(--datev-green);
 }
 .ocr-highlight[data-feld="materialkosten"] {
-  background: rgba(245,158,11,0.15);
-  border-color: var(--warning);
+  background: var(--warning-light); border-color: var(--warning);
 }
+
+/* Hover-Tooltips */
+.ocr-highlight[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: var(--bg-card);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-family: var(--font);
+  white-space: nowrap;
+  z-index: 20;
+  pointer-events: none;
+  box-shadow: var(--shadow);
+}
+
 .extraction-panel {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 4px 0;
 }
 .ext-field {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
+  padding: 10px 18px;
   border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: all var(--transition);
+  position: relative;
 }
 .ext-field:last-child { border-bottom: none; }
+.ext-field:hover { background: var(--bg-card-hover); }
+.ext-field.active-field { background: var(--accent-glow); }
+.ext-field.dimmed { opacity: 0.25; }
 .ext-label {
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .ext-value {
   font-weight: 600;
   font-family: var(--mono);
-  font-size: 0.88rem;
+  font-size: 0.86rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.ext-grounded {
-  display: inline-block;
-  width: 8px; height: 8px;
+
+/* Grounding Badges */
+.grounding-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px; height: 18px;
   border-radius: 50%;
-  background: var(--success);
-  margin-left: 6px;
-  title: "Quellenreferenz vorhanden";
+  font-size: 0.6rem;
+  flex-shrink: 0;
+}
+.grounding-badge.grounded {
+  background: var(--success-light);
+  color: var(--success);
+}
+.grounding-badge.ungrounded {
+  background: var(--warning-light);
+  color: var(--warning);
+}
+
+/* SVG Connector Overlay */
+.source-connector-svg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+.connector-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.connector-line.active { opacity: 1; }
+
+/* ── Legende ───────────────────────── */
+.legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  font-size: 0.72rem;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-dim);
+}
+.legend-dot {
+  width: 10px; height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 /* ── Missing Docs ───────────────────── */
 .missing-item {
-  padding: 8px 12px;
+  padding: 10px 14px;
   font-size: 0.84rem;
   border-left: 3px solid;
   margin: 4px 0;
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
   background: var(--bg-input);
 }
 
@@ -416,7 +638,7 @@ tr { cursor: pointer; }
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.7);
+  background: var(--modal-overlay);
   backdrop-filter: blur(4px);
   z-index: 200;
   align-items: center;
@@ -427,28 +649,33 @@ tr { cursor: pointer; }
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  width: 90%;
-  max-width: 900px;
-  max-height: 85vh;
+  width: 92%;
+  max-width: 1100px;
+  max-height: 88vh;
   overflow-y: auto;
-  box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-lg);
+  animation: modalIn 0.25s ease;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 .modal-header {
-  padding: 18px 22px;
+  padding: 20px 24px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 1.05rem;
   position: sticky;
   top: 0;
   background: var(--bg-card);
   z-index: 10;
 }
-.modal-body { padding: 22px; }
+.modal-body { padding: 24px; }
 .modal-footer {
-  padding: 14px 22px;
+  padding: 16px 24px;
   border-top: 1px solid var(--border);
   display: flex;
   gap: 10px;
@@ -460,8 +687,12 @@ tr { cursor: pointer; }
 .close-btn {
   background: none; border: none; color: var(--text-dim);
   font-size: 1.2rem; cursor: pointer;
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--transition);
 }
-.close-btn:hover { color: var(--text); }
+.close-btn:hover { color: var(--text); background: var(--bg-card-hover); }
 
 /* ── Progress Bar ───────────────────── */
 .progress-bar {
@@ -477,6 +708,33 @@ tr { cursor: pointer; }
   background: linear-gradient(90deg, var(--accent), var(--purple));
   transition: width 0.5s ease;
 }
+
+/* ── Progress Ring (Dashboard) ─────── */
+.progress-ring { position: relative; display: inline-block; }
+.progress-ring svg { transform: rotate(-90deg); }
+.progress-ring .ring-value {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+/* ── Theme Toggle ──────────────────── */
+.theme-toggle {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+  font-size: 1rem;
+  color: var(--text-dim);
+}
+.theme-toggle:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
 
 /* ── Animations ─────────────────────── */
 @keyframes fadeIn {
@@ -502,28 +760,35 @@ tr { cursor: pointer; }
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="logo">
-      <h1><span class="icon">◈</span> BelegSync</h1>
+      <h1>
+        <div class="logo-icon">B</div>
+        BelegSync
+      </h1>
       <div class="sub">KI-Belegverarbeitung</div>
     </div>
     <nav class="nav">
-      <div class="nav-section">Übersicht</div>
+      <div class="nav-section">Ubersicht</div>
       <div class="nav-item active" data-view="dashboard" onclick="showView('dashboard')">
-        📊 Dashboard
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Dashboard
       </div>
 
       <div class="nav-section">Verwaltung</div>
       <div class="nav-item" data-view="mandanten" onclick="showView('mandanten')">
-        👥 Mandanten
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        Mandanten
       </div>
 
       <div class="nav-section">Verarbeitung</div>
       <div class="nav-item" data-view="belege" onclick="showView('belege')">
-        📄 Belege <span class="badge" id="belege-badge">0</span>
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Belege <span class="badge" id="belege-badge">0</span>
       </div>
 
       <div class="nav-section">DATEV</div>
       <div class="nav-item" data-view="datev" onclick="showView('datev')">
-        🔗 DATEV Sync
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+        DATEV Sync
       </div>
     </nav>
 
@@ -536,32 +801,39 @@ tr { cursor: pointer; }
   <!-- Main -->
   <div class="main">
     <header class="topbar">
-      <div id="topbar-title" style="font-weight:600;">Dashboard</div>
+      <div id="topbar-title" style="font-weight:700; font-size: 1rem;">Dashboard</div>
       <div style="display:flex;gap:10px;align-items:center;">
-        <select class="form-select" id="mandant-select" style="width:220px;" onchange="onMandantChange()">
-          <option value="">Mandant wählen...</option>
+        <select class="form-select" id="mandant-select" style="width:240px;" onchange="onMandantChange()">
+          <option value="">Mandant wahlen...</option>
         </select>
         <select class="form-select" id="sj-select" style="width:130px;" onchange="onSteuerjahrChange()">
           <option value="">Jahr...</option>
         </select>
+        <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn" title="Dark/Light Mode">
+          <span id="theme-icon">&#9790;</span>
+        </button>
       </div>
     </header>
 
     <div class="content">
 
-      <!-- ═══ Dashboard View ═══ -->
+      <!-- Dashboard View -->
       <div class="view active" id="view-dashboard">
         <div class="stats-grid" id="stats-grid"></div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
           <div class="card">
-            <div class="card-header">📋 Letzte Belege</div>
+            <div class="card-header">
+              <span>Letzte Belege</span>
+            </div>
             <div class="card-body" id="recent-belege">
-              <p style="color:var(--text-dim);">Mandant und Steuerjahr wählen</p>
+              <p style="color:var(--text-dim);">Mandant und Steuerjahr wahlen</p>
             </div>
           </div>
           <div class="card">
-            <div class="card-header">⚠️ Fehlende Unterlagen</div>
+            <div class="card-header">
+              <span>Fehlende Unterlagen</span>
+            </div>
             <div class="card-body" id="missing-docs">
               <p style="color:var(--text-dim);">Wird nach Beleganalyse angezeigt</p>
             </div>
@@ -569,7 +841,7 @@ tr { cursor: pointer; }
         </div>
       </div>
 
-      <!-- ═══ Mandanten View ═══ -->
+      <!-- Mandanten View -->
       <div class="view" id="view-mandanten">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
           <h2 style="font-size:1.2rem;font-weight:700;">Mandanten</h2>
@@ -587,14 +859,17 @@ tr { cursor: pointer; }
         </div>
       </div>
 
-      <!-- ═══ Belege View ═══ -->
+      <!-- Belege View -->
       <div class="view" id="view-belege">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
           <h2 style="font-size:1.2rem;font-weight:700;">
             Belege <span id="belege-count" style="color:var(--text-dim);font-weight:400;"></span>
           </h2>
           <div style="display:flex;gap:10px;">
-            <button class="btn btn-ghost" onclick="refreshBelege()">↻ Aktualisieren</button>
+            <button class="btn btn-ghost" onclick="refreshBelege()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+              Aktualisieren
+            </button>
           </div>
         </div>
 
@@ -604,9 +879,11 @@ tr { cursor: pointer; }
              ondragleave="this.classList.remove('dragover')"
              ondrop="handleDrop(event)"
              onclick="document.getElementById('file-input').click()">
-          <div class="icon">📎</div>
+          <div class="dropzone-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
           <p><strong>Belege hochladen</strong> – Dateien hierher ziehen oder klicken</p>
-          <p style="font-size:0.76rem;margin-top:4px;">PDF, JPG, PNG • Max 50 MB</p>
+          <p class="drop-hint">PDF, JPG, PNG – Max 50 MB</p>
           <input type="file" id="file-input" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.bmp" style="display:none" onchange="handleFiles(this.files)">
         </div>
 
@@ -631,39 +908,45 @@ tr { cursor: pointer; }
         </div>
       </div>
 
-      <!-- ═══ DATEV View ═══ -->
+      <!-- DATEV View -->
       <div class="view" id="view-datev">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
           <h2 style="font-size:1.2rem;font-weight:700;">DATEV Integration</h2>
           <div style="display:flex;gap:10px;">
-            <button class="btn btn-success" onclick="syncToDATEV(false)">🔄 Geprüfte an DATEV senden</button>
-            <button class="btn btn-ghost" onclick="exportCSV()">⬇ CSV Export</button>
+            <button class="btn btn-success" onclick="syncToDATEV(false)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+              Gepruefte an DATEV senden
+            </button>
+            <button class="btn btn-ghost" onclick="exportCSV()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              CSV Export
+            </button>
           </div>
         </div>
 
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-label">Verbindung</div>
-            <div id="datev-connection" style="margin-top:8px;">Wird geprüft...</div>
+            <div id="datev-connection" style="margin-top:8px;">Wird geprueft...</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card datev">
             <div class="stat-label">Bereit zum Sync</div>
-            <div class="stat-value" id="datev-ready">–</div>
+            <div class="stat-value" id="datev-ready">-</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card success">
             <div class="stat-label">Gesynced</div>
-            <div class="stat-value" id="datev-synced" style="color:var(--datev-green);">–</div>
+            <div class="stat-value" id="datev-synced" style="color:var(--datev-green);">-</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card danger">
             <div class="stat-label">Fehler</div>
-            <div class="stat-value" id="datev-errors" style="color:var(--danger);">–</div>
+            <div class="stat-value" id="datev-errors" style="color:var(--danger);">-</div>
           </div>
         </div>
 
         <div class="card">
           <div class="card-header">Sync-Protokoll</div>
           <div class="card-body" id="sync-log">
-            <p style="color:var(--text-dim);">Noch keine Sync-Aktivität</p>
+            <p style="color:var(--text-dim);">Noch keine Sync-Aktivitat</p>
           </div>
         </div>
       </div>
@@ -672,24 +955,24 @@ tr { cursor: pointer; }
   </div>
 </div>
 
-<!-- ═══ Beleg Detail Modal ═══ -->
+<!-- Beleg Detail Modal -->
 <div class="modal-overlay" id="beleg-modal">
   <div class="modal">
     <div class="modal-header">
       <span id="modal-title">Beleg Details</span>
-      <button class="close-btn" onclick="closeModal()">✕</button>
+      <button class="close-btn" onclick="closeModal()">&#10005;</button>
     </div>
     <div class="modal-body" id="modal-body"></div>
     <div class="modal-footer" id="modal-footer"></div>
   </div>
 </div>
 
-<!-- ═══ New Mandant Modal ═══ -->
+<!-- New Mandant Modal -->
 <div class="modal-overlay" id="mandant-modal">
   <div class="modal" style="max-width:520px;">
     <div class="modal-header">
       <span>Neuer Mandant</span>
-      <button class="close-btn" onclick="document.getElementById('mandant-modal').classList.remove('show')">✕</button>
+      <button class="close-btn" onclick="document.getElementById('mandant-modal').classList.remove('show')">&#10005;</button>
     </div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="m-name"></div>
@@ -719,6 +1002,7 @@ let state = {
   mandantId: null,
   steuerjahrId: null,
   belege: [],
+  activeField: null,  // Source Grounding: aktuell selektiertes Feld
 };
 
 // ── API Helpers ──────────────────────
@@ -735,17 +1019,38 @@ async function api(path, opts = {}) {
 }
 
 function fmt(n) {
-  if (n == null) return '–';
+  if (n == null) return '-';
   return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 }
 
 function statusLabel(s) {
   const map = {
-    hochgeladen: 'Hochgeladen', ocr_laeuft: 'OCR läuft', ocr_fertig: 'OCR fertig',
+    hochgeladen: 'Hochgeladen', ocr_laeuft: 'OCR lauft', ocr_fertig: 'OCR fertig',
     extraktion_laeuft: 'Extraktion...', extrahiert: 'Extrahiert',
-    geprueft: 'Geprüft ✓', an_datev: 'An DATEV', fehler: 'Fehler',
+    geprueft: 'Geprueft', an_datev: 'An DATEV', fehler: 'Fehler',
   };
-  return `<span class="badge-status badge-${s}">${map[s] || s}</span>`;
+  return '<span class="badge-status badge-' + s + '">' + (map[s] || s) + '</span>';
+}
+
+// ── Theme Toggle ─────────────────────
+function toggleTheme() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  localStorage.setItem('belegsync-theme', next);
+  updateThemeIcon(next);
+}
+
+function updateThemeIcon(theme) {
+  const icon = document.getElementById('theme-icon');
+  icon.innerHTML = theme === 'dark' ? '&#9788;' : '&#9790;';
+}
+
+function initTheme() {
+  const saved = localStorage.getItem('belegsync-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+  updateThemeIcon(saved);
 }
 
 // ── Navigation ───────────────────────
@@ -755,13 +1060,19 @@ function showView(name) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
   const titles = { dashboard: 'Dashboard', mandanten: 'Mandanten', belege: 'Belege', datev: 'DATEV Integration' };
   document.getElementById('topbar-title').textContent = titles[name] || name;
-
   if (name === 'datev') loadDATEVStatus();
 }
 
 // ── Init ─────────────────────────────
 async function init() {
+  initTheme();
   await loadMandanten();
+
+  // Auto-select first Mandant if none selected
+  if (!state.mandantId && state.mandanten.length > 0) {
+    await selectMandant(state.mandanten[0].id);
+  }
+
   loadDashboard();
   checkDATEV();
 }
@@ -770,24 +1081,24 @@ async function init() {
 async function loadMandanten() {
   state.mandanten = await api('/api/mandanten');
   const sel = document.getElementById('mandant-select');
-  sel.innerHTML = '<option value="">Mandant wählen...</option>' +
-    state.mandanten.map(m => `<option value="${m.id}">${m.name}${m.firma ? ' – ' + m.firma : ''}</option>`).join('');
+  sel.innerHTML = '<option value="">Mandant wahlen...</option>' +
+    state.mandanten.map(m => '<option value="' + m.id + '">' + m.name + (m.firma ? ' - ' + m.firma : '') + '</option>').join('');
 
   renderMandantenTable();
   if (state.mandantId) sel.value = state.mandantId;
 }
 
 function renderMandantenTable() {
-  document.getElementById('mandanten-table').innerHTML = state.mandanten.map(m => `
-    <tr onclick="selectMandant(${m.id})">
-      <td><strong>${m.name}</strong></td>
-      <td>${m.firma || '–'}</td>
-      <td style="font-family:var(--mono);font-size:0.82rem;">${m.steuernummer || '–'}</td>
-      <td style="font-family:var(--mono);font-size:0.82rem;">${m.datev_berater_nr || '–'}/${m.datev_mandant_nr || '–'}</td>
-      <td>${m.anzahl_steuerjahre}</td>
-      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deleteMandant(${m.id})">🗑</button></td>
-    </tr>
-  `).join('');
+  document.getElementById('mandanten-table').innerHTML = state.mandanten.map(m =>
+    '<tr onclick="selectMandant(' + m.id + ')">' +
+      '<td><strong>' + m.name + '</strong></td>' +
+      '<td>' + (m.firma || '-') + '</td>' +
+      '<td style="font-family:var(--mono);font-size:0.82rem;">' + (m.steuernummer || '-') + '</td>' +
+      '<td style="font-family:var(--mono);font-size:0.82rem;">' + (m.datev_berater_nr || '-') + '/' + (m.datev_mandant_nr || '-') + '</td>' +
+      '<td>' + m.anzahl_steuerjahre + '</td>' +
+      '<td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deleteMandant(' + m.id + ')">&#128465;</button></td>' +
+    '</tr>'
+  ).join('');
 }
 
 async function selectMandant(id) {
@@ -838,18 +1149,18 @@ async function saveMandant() {
 }
 
 async function deleteMandant(id) {
-  if (!confirm('Mandant und alle Daten löschen?')) return;
-  await api(`/api/mandanten/${id}`, { method: 'DELETE' });
+  if (!confirm('Mandant und alle Daten loschen?')) return;
+  await api('/api/mandanten/' + id, { method: 'DELETE' });
   await loadMandanten();
 }
 
 // ── Steuerjahre ──────────────────────
 async function loadSteuerjahre() {
   if (!state.mandantId) return;
-  const sjs = await api(`/api/steuerjahre/mandant/${state.mandantId}`);
+  const sjs = await api('/api/steuerjahre/mandant/' + state.mandantId);
   const sel = document.getElementById('sj-select');
   sel.innerHTML = '<option value="">Jahr...</option>' +
-    sjs.map(s => `<option value="${s.id}">${s.jahr} (${s.anzahl_belege} Belege)</option>`).join('');
+    sjs.map(s => '<option value="' + s.id + '">' + s.jahr + ' (' + s.anzahl_belege + ' Belege)</option>').join('');
 
   if (sjs.length > 0) {
     state.steuerjahrId = sjs[0].id;
@@ -868,25 +1179,35 @@ async function onSteuerjahrChange() {
 async function loadDashboard() {
   try {
     const d = await api('/api/dashboard');
-    document.getElementById('stats-grid').innerHTML = `
-      <div class="stat-card animate-in"><div class="stat-label">Mandanten</div><div class="stat-value">${d.mandanten_aktiv}</div></div>
-      <div class="stat-card animate-in" style="animation-delay:50ms"><div class="stat-label">Belege gesamt</div><div class="stat-value">${d.belege_gesamt}</div></div>
-      <div class="stat-card animate-in" style="animation-delay:100ms"><div class="stat-label">Offen</div><div class="stat-value" style="color:var(--warning)">${d.belege_offen}</div></div>
-      <div class="stat-card animate-in" style="animation-delay:150ms"><div class="stat-label">Geprüft</div><div class="stat-value" style="color:var(--success)">${d.belege_geprueft}</div></div>
-      <div class="stat-card animate-in" style="animation-delay:200ms"><div class="stat-label">An DATEV</div><div class="stat-value" style="color:var(--datev-green)">${d.belege_synced}</div></div>
-      <div class="stat-card animate-in" style="animation-delay:250ms"><div class="stat-label">Extraktionsrate</div><div class="stat-value">${d.extraktion_rate}%</div>
-        <div class="progress-bar"><div class="progress-fill" style="width:${d.extraktion_rate}%"></div></div>
-      </div>
-      <div class="stat-card animate-in" style="animation-delay:300ms"><div class="stat-label">Summe Brutto</div><div class="stat-value">${fmt(d.summe_brutto)} €</div></div>
-    `;
+    const ring = buildProgressRing(d.extraktion_rate, 52, 5);
+    document.getElementById('stats-grid').innerHTML =
+      '<div class="stat-card animate-in"><div class="stat-label">Mandanten</div><div class="stat-value">' + d.mandanten_aktiv + '</div></div>' +
+      '<div class="stat-card purple animate-in" style="animation-delay:50ms"><div class="stat-label">Belege gesamt</div><div class="stat-value">' + d.belege_gesamt + '</div></div>' +
+      '<div class="stat-card warning animate-in" style="animation-delay:100ms"><div class="stat-label">Offen</div><div class="stat-value" style="color:var(--warning)">' + d.belege_offen + '</div></div>' +
+      '<div class="stat-card success animate-in" style="animation-delay:150ms"><div class="stat-label">Geprueft</div><div class="stat-value" style="color:var(--success)">' + d.belege_geprueft + '</div></div>' +
+      '<div class="stat-card datev animate-in" style="animation-delay:200ms"><div class="stat-label">An DATEV</div><div class="stat-value" style="color:var(--datev-green)">' + d.belege_synced + '</div></div>' +
+      '<div class="stat-card animate-in" style="animation-delay:250ms"><div class="stat-label">Extraktionsrate</div><div style="display:flex;align-items:center;gap:16px;margin-top:6px;">' + ring + '</div></div>' +
+      '<div class="stat-card animate-in" style="animation-delay:300ms"><div class="stat-label">Summe Brutto</div><div class="stat-value">' + fmt(d.summe_brutto) + ' &euro;</div></div>';
     document.getElementById('belege-badge').textContent = d.belege_offen;
   } catch(e) { console.error(e); }
+}
+
+function buildProgressRing(pct, size, stroke) {
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (pct / 100) * circ;
+  return '<div class="progress-ring">' +
+    '<svg width="' + size + '" height="' + size + '">' +
+    '<circle cx="' + size/2 + '" cy="' + size/2 + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="' + stroke + '"/>' +
+    '<circle cx="' + size/2 + '" cy="' + size/2 + '" r="' + r + '" fill="none" stroke="var(--accent)" stroke-width="' + stroke + '" stroke-linecap="round" stroke-dasharray="' + circ + '" stroke-dashoffset="' + offset + '" style="transition:stroke-dashoffset 1s ease;"/>' +
+    '</svg>' +
+    '<span class="ring-value">' + pct + '%</span></div>';
 }
 
 // ── Belege ───────────────────────────
 async function loadBelege() {
   if (!state.steuerjahrId) return;
-  state.belege = await api(`/api/belege/steuerjahr/${state.steuerjahrId}`);
+  state.belege = await api('/api/belege/steuerjahr/' + state.steuerjahrId);
   renderBelege();
   renderRecentBelege();
   loadDashboard();
@@ -895,40 +1216,40 @@ async function loadBelege() {
 function refreshBelege() { loadBelege(); }
 
 function renderBelege() {
-  const count = document.getElementById('belege-count');
-  count.textContent = `(${state.belege.length})`;
-  document.getElementById('belege-table').innerHTML = state.belege.map(b => `
-    <tr onclick="openBeleg(${b.id})">
-      <td title="${b.dateiname}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.dateiname}</td>
-      <td>${b.beleg_typ || '–'}</td>
-      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.aussteller || '–'}</td>
-      <td style="font-family:var(--mono);text-align:right;">${b.betrag_brutto != null ? fmt(b.betrag_brutto) + ' €' : '–'}</td>
-      <td style="font-family:var(--mono);">${b.skr03_konto || '–'}</td>
-      <td>${statusLabel(b.status)}</td>
-      <td><span class="konfidenz-${b.extraktion_konfidenz || 'niedrig'}">${b.extraktion_konfidenz || '–'}</span></td>
-      <td>${b.datev_sync_status === 'synced' ? '<span style="color:var(--datev-green)">✓</span>' : (b.datev_sync_status === 'error' ? '<span style="color:var(--danger)">✗</span>' : '–')}</td>
-    </tr>
-  `).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:30px;">Keine Belege vorhanden</td></tr>';
+  document.getElementById('belege-count').textContent = '(' + state.belege.length + ')';
+  document.getElementById('belege-table').innerHTML = state.belege.map(b => {
+    const konfDot = b.extraktion_konfidenz === 'hoch' ? 'var(--success)' : (b.extraktion_konfidenz === 'mittel' ? 'var(--warning)' : 'var(--danger)');
+    return '<tr onclick="openBeleg(' + b.id + ')">' +
+      '<td title="' + b.dateiname + '" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + b.dateiname + '</td>' +
+      '<td>' + (b.beleg_typ || '-') + '</td>' +
+      '<td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (b.aussteller || '-') + '</td>' +
+      '<td style="font-family:var(--mono);text-align:right;">' + (b.betrag_brutto != null ? fmt(b.betrag_brutto) + ' &euro;' : '-') + '</td>' +
+      '<td style="font-family:var(--mono);">' + (b.skr03_konto || '-') + '</td>' +
+      '<td>' + statusLabel(b.status) + '</td>' +
+      '<td>' + (b.extraktion_konfidenz ? '<span class="konfidenz-dot" style="background:' + konfDot + '"></span><span class="konfidenz-' + b.extraktion_konfidenz + '">' + b.extraktion_konfidenz + '</span>' : '-') + '</td>' +
+      '<td>' + (b.datev_sync_status === 'synced' ? '<span style="color:var(--datev-green);font-weight:700;">&#10003;</span>' : (b.datev_sync_status === 'error' ? '<span style="color:var(--danger);">&#10007;</span>' : '-')) + '</td>' +
+    '</tr>';
+  }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:40px;">Keine Belege vorhanden</td></tr>';
 }
 
 function renderRecentBelege() {
   const recent = state.belege.slice(0, 5);
-  document.getElementById('recent-belege').innerHTML = recent.map(b => `
-    <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:0.84rem;cursor:pointer;" onclick="openBeleg(${b.id})">
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">${b.dateiname}</span>
-      <span>${statusLabel(b.status)}</span>
-    </div>
-  `).join('') || '<p style="color:var(--text-dim);">Keine Belege</p>';
+  document.getElementById('recent-belege').innerHTML = recent.map(b =>
+    '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.84rem;cursor:pointer;" onclick="openBeleg(' + b.id + ')">' +
+      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">' + b.dateiname + '</span>' +
+      '<span>' + statusLabel(b.status) + '</span>' +
+    '</div>'
+  ).join('') || '<p style="color:var(--text-dim);">Keine Belege</p>';
 }
 
 function renderMissing(v) {
   if (!v || !v.empfehlungen || v.empfehlungen.length === 0) {
-    document.getElementById('missing-docs').innerHTML = '<p style="color:var(--success);">✓ Alle erwarteten Belege vorhanden</p>';
+    document.getElementById('missing-docs').innerHTML = '<p style="color:var(--success);font-weight:600;">&#10003; Alle erwarteten Belege vorhanden</p>';
     return;
   }
   document.getElementById('missing-docs').innerHTML = v.empfehlungen.map(e => {
-    const color = e.startsWith('🔴') ? 'var(--danger)' : (e.startsWith('🟡') ? 'var(--warning)' : 'var(--accent)');
-    return `<div class="missing-item" style="border-left-color:${color};">${e}</div>`;
+    var color = e.startsWith('\uD83D\uDD34') ? 'var(--danger)' : (e.startsWith('\uD83D\uDFE1') ? 'var(--warning)' : 'var(--accent)');
+    return '<div class="missing-item" style="border-left-color:' + color + ';">' + e + '</div>';
   }).join('');
 }
 
@@ -940,46 +1261,44 @@ function handleDrop(e) {
 }
 
 async function handleFiles(files) {
-  if (!state.steuerjahrId) return alert('Bitte Mandant und Steuerjahr wählen');
+  if (!state.steuerjahrId) return alert('Bitte Mandant und Steuerjahr wahlen');
   if (!files.length) return;
 
-  const prog = document.getElementById('upload-progress');
-  const bar = document.getElementById('upload-bar');
-  const text = document.getElementById('upload-text');
-  const pct = document.getElementById('upload-pct');
+  var prog = document.getElementById('upload-progress');
+  var bar = document.getElementById('upload-bar');
+  var text = document.getElementById('upload-text');
+  var pct = document.getElementById('upload-pct');
   prog.style.display = 'block';
 
-  const fd = new FormData();
-  for (const f of files) fd.append('files', f);
+  var fd = new FormData();
+  for (var i = 0; i < files.length; i++) fd.append('files', files[i]);
 
-  text.textContent = `${files.length} Datei(en) werden hochgeladen...`;
+  text.textContent = files.length + ' Datei(en) werden hochgeladen...';
   bar.style.width = '30%';
   pct.textContent = '30%';
 
   try {
-    const res = await fetch(`/api/belege/upload/${state.steuerjahrId}`, { method: 'POST', body: fd });
+    var res = await fetch('/api/belege/upload/' + state.steuerjahrId, { method: 'POST', body: fd });
     bar.style.width = '70%';
     pct.textContent = '70%';
 
     if (!res.ok) throw new Error((await res.json()).detail || 'Upload fehlgeschlagen');
 
-    const uploaded = await res.json();
+    var uploaded = await res.json();
     bar.style.width = '100%';
     pct.textContent = '100%';
-    text.textContent = `✓ ${uploaded.length} Beleg(e) hochgeladen – Verarbeitung läuft...`;
+    text.textContent = '\u2713 ' + uploaded.length + ' Beleg(e) hochgeladen - Verarbeitung lauft...';
 
-    // Poll for completion
-    setTimeout(async () => {
+    setTimeout(async function() {
       await loadBelege();
       prog.style.display = 'none';
     }, 2000);
 
-    // Auto-refresh while processing
-    let polls = 0;
-    const interval = setInterval(async () => {
+    var polls = 0;
+    var interval = setInterval(async function() {
       await loadBelege();
       polls++;
-      const processing = state.belege.filter(b => ['hochgeladen','ocr_laeuft','ocr_fertig','extraktion_laeuft'].includes(b.status));
+      var processing = state.belege.filter(function(b) { return ['hochgeladen','ocr_laeuft','ocr_fertig','extraktion_laeuft'].indexOf(b.status) >= 0; });
       if (processing.length === 0 || polls > 30) {
         clearInterval(interval);
         prog.style.display = 'none';
@@ -987,123 +1306,147 @@ async function handleFiles(files) {
     }, 3000);
 
   } catch(e) {
-    text.textContent = '✗ ' + e.message;
+    text.textContent = '\u2717 ' + e.message;
     bar.style.width = '100%';
     bar.style.background = 'var(--danger)';
-    setTimeout(() => { prog.style.display = 'none'; bar.style.background = ''; }, 4000);
+    setTimeout(function() { prog.style.display = 'none'; bar.style.background = ''; }, 4000);
   }
 }
 
 // ── Beleg Detail Modal ───────────────
+
+// Feld-Farben Map
+var FELD_COLORS = {
+  aussteller: { color: '#2563EB', label: 'Aussteller' },
+  betrag_brutto: { color: '#059669', label: 'Betrag brutto' },
+  betrag_netto: { color: '#059669', label: 'Betrag netto' },
+  mwst_betrag: { color: '#059669', label: 'MwSt' },
+  datum_beleg: { color: '#7C3AED', label: 'Datum' },
+  rechnungsnummer: { color: '#EC4899', label: 'Rechnungsnr.' },
+  arbeitskosten_35a: { color: '#3CAA5F', label: '\u00a735a Arbeitskosten' },
+  materialkosten: { color: '#D97706', label: 'Materialkosten' },
+};
+
+function getFeldColor(feld) {
+  return (FELD_COLORS[feld] && FELD_COLORS[feld].color) || '#2563EB';
+}
+
+function getFeldLabel(feld) {
+  return (FELD_COLORS[feld] && FELD_COLORS[feld].label) || feld;
+}
+
 async function openBeleg(id) {
-  const b = await api(`/api/belege/${id}`);
+  state.activeField = null;
+  var b = await api('/api/belege/' + id);
   document.getElementById('modal-title').textContent = b.dateiname;
 
   // Build source-grounded OCR view
-  let ocrHtml = '<p style="color:var(--text-dim);">Kein OCR-Text</p>';
+  var ocrHtml = '<p style="color:var(--text-dim);">Kein OCR-Text</p>';
   if (b.ocr_text) {
     ocrHtml = buildSourceGroundedText(b.ocr_text, b.quellreferenzen || []);
   }
 
   // Build extraction fields
-  const fields = [
-    ['Belegtyp', b.beleg_typ],
-    ['Aussteller', b.aussteller],
-    ['Beschreibung', b.beschreibung],
-    ['Datum', b.datum_beleg],
-    ['Rechnungsnr.', b.rechnungsnummer],
-    ['Brutto', b.betrag_brutto != null ? fmt(b.betrag_brutto) + ' €' : null],
-    ['Netto', b.betrag_netto != null ? fmt(b.betrag_netto) + ' €' : null],
-    ['MwSt-Satz', b.mwst_satz != null ? b.mwst_satz + '%' : null],
-    ['MwSt-Betrag', b.mwst_betrag != null ? fmt(b.mwst_betrag) + ' €' : null],
-    ['SKR03-Konto', b.skr03_konto ? b.skr03_konto + (b.skr03_bezeichnung ? ' – ' + b.skr03_bezeichnung : '') : null],
-    ['Gegenkonto', b.gegenkonto],
-    ['BU-Schlüssel', b.bu_schluessel],
-    ['Steuer-Kategorie', b.steuer_kategorie],
-    ['§35a Arbeitskosten', b.paragraph_35a_anteil != null ? fmt(b.paragraph_35a_anteil) + ' €' : null],
-    ['Materialkosten', b.materialkosten != null ? fmt(b.materialkosten) + ' €' : null],
+  var fields = [
+    ['beleg_typ', 'Belegtyp', b.beleg_typ],
+    ['aussteller', 'Aussteller', b.aussteller],
+    ['beschreibung', 'Beschreibung', b.beschreibung],
+    ['datum_beleg', 'Datum', b.datum_beleg],
+    ['rechnungsnummer', 'Rechnungsnr.', b.rechnungsnummer],
+    ['betrag_brutto', 'Brutto', b.betrag_brutto != null ? fmt(b.betrag_brutto) + ' \u20ac' : null],
+    ['betrag_netto', 'Netto', b.betrag_netto != null ? fmt(b.betrag_netto) + ' \u20ac' : null],
+    ['mwst_satz', 'MwSt-Satz', b.mwst_satz != null ? b.mwst_satz + '%' : null],
+    ['mwst_betrag', 'MwSt-Betrag', b.mwst_betrag != null ? fmt(b.mwst_betrag) + ' \u20ac' : null],
+    ['skr03_konto', 'SKR03-Konto', b.skr03_konto ? b.skr03_konto + (b.skr03_bezeichnung ? ' - ' + b.skr03_bezeichnung : '') : null],
+    ['gegenkonto', 'Gegenkonto', b.gegenkonto],
+    ['bu_schluessel', 'BU-Schluessel', b.bu_schluessel],
+    ['steuer_kategorie', 'Steuer-Kategorie', b.steuer_kategorie],
+    ['arbeitskosten_35a', '\u00a735a Arbeitskosten', b.paragraph_35a_anteil != null ? fmt(b.paragraph_35a_anteil) + ' \u20ac' : null],
+    ['materialkosten', 'Materialkosten', b.materialkosten != null ? fmt(b.materialkosten) + ' \u20ac' : null],
   ];
 
-  const groundedFields = new Set((b.quellreferenzen || []).map(s => s.feld).filter(Boolean));
+  var groundedFields = {};
+  (b.quellreferenzen || []).forEach(function(s) { if (s.feld) groundedFields[s.feld] = true; });
 
-  const fieldsHtml = fields.map(([label, value]) => {
+  var fieldsHtml = fields.map(function(f) {
+    var key = f[0], label = f[1], value = f[2];
     if (!value) return '';
-    const grounded = groundedFields.has(label.toLowerCase().replace(/[^a-z]/g, '')) ||
-                     groundedFields.has(label.toLowerCase());
-    return `<div class="ext-field">
-      <span class="ext-label">${label}</span>
-      <span class="ext-value">${value}${grounded ? '<span class="ext-grounded" title="Quellreferenz im Text gefunden"></span>' : ''}</span>
-    </div>`;
+    var isGrounded = groundedFields[key];
+    var badge = isGrounded
+      ? '<span class="grounding-badge grounded" title="Quellenreferenz im OCR-Text gefunden">&#10003;</span>'
+      : '<span class="grounding-badge ungrounded" title="Keine Quellenreferenz">?</span>';
+    return '<div class="ext-field" data-field-key="' + key + '" onclick="selectSourceField(\'' + key + '\')">' +
+      '<span class="ext-label">' + badge + ' ' + label + '</span>' +
+      '<span class="ext-value">' + value + '</span>' +
+    '</div>';
   }).join('');
 
-  document.getElementById('modal-body').innerHTML = `
-    <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-      ${statusLabel(b.status)}
-      <span style="font-size:0.82rem;color:var(--text-dim);">Methode: <strong>${b.extraktion_methode || '–'}</strong></span>
-      <span style="font-size:0.82rem;">Konfidenz: <strong class="konfidenz-${b.extraktion_konfidenz || 'niedrig'}">${b.extraktion_konfidenz || '–'}</strong></span>
-      <span style="font-size:0.82rem;color:var(--text-dim);">OCR: ${b.ocr_konfidenz ? b.ocr_konfidenz.toFixed(1) + '%' : '–'}</span>
-    </div>
+  // Legend
+  var legendHtml = '<div class="legend">';
+  Object.keys(FELD_COLORS).forEach(function(key) {
+    legendHtml += '<div class="legend-item"><span class="legend-dot" style="background:' + FELD_COLORS[key].color + ';"></span>' + FELD_COLORS[key].label + '</div>';
+  });
+  legendHtml += '</div>';
 
-    <div style="display:flex;gap:8px;margin-bottom:16px;">
-      <div style="font-size:0.72rem;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;">
-        <span>🔵 Aussteller</span>
-        <span style="color:var(--success);">🟢 Betrag</span>
-        <span style="color:var(--purple);">🟣 Datum</span>
-        <span style="color:var(--success);">● Arbeitskosten</span>
-        <span style="color:var(--warning);">● Materialkosten</span>
-        <span style="color:var(--accent);">● Sonstiges</span>
-      </div>
-    </div>
-
-    <div class="source-view">
-      <div>
-        <div style="font-size:0.76rem;font-weight:600;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">OCR-Text mit Quellenreferenzen</div>
-        <div class="ocr-panel">${ocrHtml}</div>
-      </div>
-      <div>
-        <div style="font-size:0.76rem;font-weight:600;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Extrahierte Daten</div>
-        <div class="extraction-panel">${fieldsHtml || '<p style="color:var(--text-dim);">Keine Extraktion</p>'}</div>
-
-        ${b.status === 'extrahiert' || b.status === 'geprueft' ? `
-        <div style="margin-top:16px;">
-          <div class="form-group">
-            <label class="form-label">Prüfnotiz</label>
-            <input class="form-input" id="pruefnotiz" value="${b.pruefnotiz || ''}" placeholder="Optionale Notiz...">
-          </div>
-        </div>` : ''}
-      </div>
-    </div>
-  `;
+  document.getElementById('modal-body').innerHTML =
+    '<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">' +
+      statusLabel(b.status) +
+      '<span style="font-size:0.82rem;color:var(--text-dim);">Methode: <strong>' + (b.extraktion_methode || '-') + '</strong></span>' +
+      '<span style="font-size:0.82rem;">Konfidenz: <strong class="konfidenz-' + (b.extraktion_konfidenz || 'niedrig') + '">' + (b.extraktion_konfidenz || '-') + '</strong></span>' +
+      '<span style="font-size:0.82rem;color:var(--text-dim);">OCR: ' + (b.ocr_konfidenz ? b.ocr_konfidenz.toFixed(1) + '%' : '-') + '</span>' +
+    '</div>' +
+    legendHtml +
+    '<div class="source-view" id="source-view-container">' +
+      '<svg class="source-connector-svg" id="connector-svg"></svg>' +
+      '<div>' +
+        '<div style="font-size:0.74rem;font-weight:600;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">OCR-Text mit Quellenreferenzen</div>' +
+        '<div class="ocr-panel" id="ocr-panel">' + ocrHtml + '</div>' +
+      '</div>' +
+      '<div>' +
+        '<div style="font-size:0.74rem;font-weight:600;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Extrahierte Daten</div>' +
+        '<div class="extraction-panel" id="extraction-panel">' + (fieldsHtml || '<p style="color:var(--text-dim);">Keine Extraktion</p>') + '</div>' +
+        ((['extrahiert', 'geprueft'].indexOf(b.status) >= 0) ?
+        '<div style="margin-top:16px;"><div class="form-group"><label class="form-label">Pruefnotiz</label><input class="form-input" id="pruefnotiz" value="' + (b.pruefnotiz || '') + '" placeholder="Optionale Notiz..."></div></div>' : '') +
+      '</div>' +
+    '</div>';
 
   // Footer buttons
-  const canApprove = ['extrahiert'].includes(b.status);
-  const canReprocess = ['fehler', 'extrahiert'].includes(b.status);
-  document.getElementById('modal-footer').innerHTML = `
-    <button class="btn btn-danger btn-sm" onclick="deleteBeleg(${b.id})">Löschen</button>
-    <div style="flex:1"></div>
-    ${canReprocess ? `<button class="btn btn-ghost" onclick="reprocessBeleg(${b.id})">↻ Neu verarbeiten</button>` : ''}
-    ${canApprove ? `<button class="btn btn-success" onclick="approveBeleg(${b.id})">✓ Freigeben</button>` : ''}
-    <button class="btn btn-ghost" onclick="closeModal()">Schließen</button>
-  `;
+  var canApprove = b.status === 'extrahiert';
+  var canReprocess = b.status === 'fehler' || b.status === 'extrahiert';
+  document.getElementById('modal-footer').innerHTML =
+    '<button class="btn btn-danger btn-sm" onclick="deleteBeleg(' + b.id + ')">Loschen</button>' +
+    '<div style="flex:1"></div>' +
+    (canReprocess ? '<button class="btn btn-ghost" onclick="reprocessBeleg(' + b.id + ')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Neu verarbeiten</button>' : '') +
+    (canApprove ? '<button class="btn btn-success" onclick="approveBeleg(' + b.id + ')">&#10003; Freigeben</button>' : '') +
+    '<button class="btn btn-ghost" onclick="closeModal()">Schliessen</button>';
 
   document.getElementById('beleg-modal').classList.add('show');
+
+  // Setup click-outside to deselect
+  document.getElementById('ocr-panel').addEventListener('click', function(e) {
+    if (!e.target.classList.contains('ocr-highlight')) {
+      clearSourceSelection();
+    }
+  });
 }
 
 function buildSourceGroundedText(text, spans) {
   if (!spans || spans.length === 0) return escHtml(text);
 
-  // Sort spans by start position, then merge/handle overlaps
-  const sorted = [...spans].sort((a, b) => a.start - b.start);
-  let result = '';
-  let pos = 0;
+  var sorted = spans.slice().sort(function(a, b) { return a.start - b.start; });
+  var result = '';
+  var pos = 0;
 
-  for (const span of sorted) {
-    if (span.start < pos) continue; // skip overlapping
+  for (var i = 0; i < sorted.length; i++) {
+    var span = sorted[i];
+    if (span.start < pos) continue;
     if (span.start > pos) {
       result += escHtml(text.slice(pos, span.start));
     }
-    const highlighted = text.slice(span.start, span.end);
-    result += `<span class="ocr-highlight" data-feld="${span.feld || ''}" title="${span.feld || 'Extrahiert'}: ${escAttr(highlighted)}">${escHtml(highlighted)}</span>`;
+    var highlighted = text.slice(span.start, span.end);
+    var feld = span.feld || '';
+    var tooltip = getFeldLabel(feld) + ': ' + highlighted.substring(0, 60);
+    result += '<span class="ocr-highlight" data-feld="' + feld + '" data-tooltip="' + escAttr(tooltip) + '" onclick="selectSourceFieldFromOCR(\'' + feld + '\')">' + escHtml(highlighted) + '</span>';
     pos = span.end;
   }
   if (pos < text.length) {
@@ -1115,29 +1458,114 @@ function buildSourceGroundedText(text, spans) {
 function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escAttr(s) { return s.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
+// ── Source Grounding Interaktivitat ──
+
+function selectSourceField(feld) {
+  if (state.activeField === feld) {
+    clearSourceSelection();
+    return;
+  }
+  state.activeField = feld;
+
+  // Dim all fields, activate selected
+  document.querySelectorAll('.ext-field').forEach(function(el) {
+    el.classList.toggle('active-field', el.dataset.fieldKey === feld);
+    el.classList.toggle('dimmed', el.dataset.fieldKey !== feld);
+  });
+
+  // Dim all OCR highlights, activate matching
+  document.querySelectorAll('.ocr-highlight').forEach(function(el) {
+    var match = el.dataset.feld === feld;
+    el.classList.toggle('active-highlight', match);
+    el.classList.toggle('dimmed', !match);
+    if (match) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+
+  // Draw connector
+  drawConnector(feld);
+}
+
+function selectSourceFieldFromOCR(feld) {
+  selectSourceField(feld);
+}
+
+function clearSourceSelection() {
+  state.activeField = null;
+  document.querySelectorAll('.ext-field').forEach(function(el) {
+    el.classList.remove('active-field', 'dimmed');
+  });
+  document.querySelectorAll('.ocr-highlight').forEach(function(el) {
+    el.classList.remove('active-highlight', 'dimmed');
+  });
+  clearConnectors();
+}
+
+function drawConnector(feld) {
+  var svg = document.getElementById('connector-svg');
+  if (!svg) return;
+  svg.innerHTML = '';
+
+  var container = document.getElementById('source-view-container');
+  if (!container) return;
+  var containerRect = container.getBoundingClientRect();
+
+  // Find field element
+  var fieldEl = document.querySelector('.ext-field[data-field-key="' + feld + '"]');
+  var highlightEl = document.querySelector('.ocr-highlight.active-highlight[data-feld="' + feld + '"]');
+
+  if (!fieldEl || !highlightEl) return;
+
+  var fieldRect = fieldEl.getBoundingClientRect();
+  var highlightRect = highlightEl.getBoundingClientRect();
+
+  // Calculate positions relative to container
+  var x1 = highlightRect.right - containerRect.left;
+  var y1 = highlightRect.top + highlightRect.height / 2 - containerRect.top;
+  var x2 = fieldRect.left - containerRect.left;
+  var y2 = fieldRect.top + fieldRect.height / 2 - containerRect.top;
+
+  // Bezier control points
+  var cx = (x1 + x2) / 2;
+  var color = getFeldColor(feld);
+
+  var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M ' + x1 + ' ' + y1 + ' C ' + cx + ' ' + y1 + ', ' + cx + ' ' + y2 + ', ' + x2 + ' ' + y2);
+  path.setAttribute('class', 'connector-line active');
+  path.setAttribute('stroke', color);
+  svg.appendChild(path);
+}
+
+function clearConnectors() {
+  var svg = document.getElementById('connector-svg');
+  if (svg) svg.innerHTML = '';
+}
+
 function closeModal() {
+  state.activeField = null;
   document.getElementById('beleg-modal').classList.remove('show');
 }
 
 async function approveBeleg(id) {
-  const notiz = document.getElementById('pruefnotiz')?.value || '';
-  await api(`/api/belege/${id}`, {
+  var notiz = document.getElementById('pruefnotiz');
+  await api('/api/belege/' + id, {
     method: 'PUT',
-    body: JSON.stringify({ manuell_geprueft: true, pruefnotiz: notiz }),
+    body: JSON.stringify({ manuell_geprueft: true, pruefnotiz: notiz ? notiz.value : '' }),
   });
   closeModal();
   await loadBelege();
 }
 
 async function reprocessBeleg(id) {
-  await api(`/api/belege/${id}/reprocess`, { method: 'POST' });
+  await api('/api/belege/' + id + '/reprocess', { method: 'POST' });
   closeModal();
   setTimeout(loadBelege, 2000);
 }
 
 async function deleteBeleg(id) {
-  if (!confirm('Beleg löschen?')) return;
-  await api(`/api/belege/${id}`, { method: 'DELETE' });
+  if (!confirm('Beleg loschen?')) return;
+  await api('/api/belege/' + id, { method: 'DELETE' });
   closeModal();
   await loadBelege();
 }
@@ -1145,10 +1573,10 @@ async function deleteBeleg(id) {
 // ── DATEV ────────────────────────────
 async function checkDATEV() {
   try {
-    const status = await api('/api/datev/status');
-    const dot = document.getElementById('datev-dot');
-    const label = document.getElementById('datev-label');
-    if (status.maesn_configured && status.connection?.connected) {
+    var status = await api('/api/datev/status');
+    var dot = document.getElementById('datev-dot');
+    var label = document.getElementById('datev-label');
+    if (status.maesn_configured && status.connection && status.connection.connected) {
       dot.className = 'datev-dot connected';
       label.textContent = 'DATEV verbunden';
     } else if (status.maesn_configured) {
@@ -1163,20 +1591,19 @@ async function checkDATEV() {
 
 async function loadDATEVStatus() {
   try {
-    const status = await api('/api/datev/status');
-    const conn = document.getElementById('datev-connection');
+    var status = await api('/api/datev/status');
+    var conn = document.getElementById('datev-connection');
     if (status.maesn_configured) {
-      conn.innerHTML = status.connection?.connected
-        ? '<span style="color:var(--datev-green);font-weight:600;">✓ Maesn verbunden</span><br><span style="font-size:0.78rem;color:var(--text-dim);">Sandbox: ' + (status.sandbox ? 'Ja' : 'Nein') + '</span>'
+      conn.innerHTML = (status.connection && status.connection.connected)
+        ? '<span style="color:var(--datev-green);font-weight:600;">&#10003; Maesn verbunden</span><br><span style="font-size:0.78rem;color:var(--text-dim);">Sandbox: ' + (status.sandbox ? 'Ja' : 'Nein') + '</span>'
         : '<span style="color:var(--warning);font-weight:600;">Maesn konfiguriert, Verbindung fehlgeschlagen</span>';
     } else {
-      conn.innerHTML = '<span style="color:var(--text-dim);">Maesn API Key in .env konfigurieren</span><br><span style="font-size:0.78rem;">→ <a href="https://www.maesn.com" target="_blank" style="color:var(--accent);">maesn.com</a></span>';
+      conn.innerHTML = '<span style="color:var(--text-dim);">Maesn API Key in .env konfigurieren</span><br><span style="font-size:0.78rem;">&rarr; <a href="https://www.maesn.com" target="_blank" style="color:var(--accent);">maesn.com</a></span>';
     }
 
-    // Count belege stats
-    const ready = state.belege.filter(b => b.manuell_geprueft && b.datev_sync_status !== 'synced').length;
-    const synced = state.belege.filter(b => b.datev_sync_status === 'synced').length;
-    const errors = state.belege.filter(b => b.datev_sync_status === 'error').length;
+    var ready = state.belege.filter(function(b) { return b.manuell_geprueft && b.datev_sync_status !== 'synced'; }).length;
+    var synced = state.belege.filter(function(b) { return b.datev_sync_status === 'synced'; }).length;
+    var errors = state.belege.filter(function(b) { return b.datev_sync_status === 'error'; }).length;
     document.getElementById('datev-ready').textContent = ready;
     document.getElementById('datev-synced').textContent = synced;
     document.getElementById('datev-errors').textContent = errors;
@@ -1185,32 +1612,32 @@ async function loadDATEVStatus() {
 }
 
 async function syncToDATEV(includeUnreviewed) {
-  if (!state.steuerjahrId) return alert('Steuerjahr wählen');
+  if (!state.steuerjahrId) return alert('Steuerjahr wahlen');
   try {
-    const result = await api('/api/datev/sync', {
+    var result = await api('/api/datev/sync', {
       method: 'POST',
       body: JSON.stringify({
         steuerjahr_id: state.steuerjahrId,
         nur_gepruefte: !includeUnreviewed,
       }),
     });
-    alert(`DATEV Sync: ${result.success || 0} erfolgreich, ${result.errors || 0} Fehler`);
+    alert('DATEV Sync: ' + (result.success || 0) + ' erfolgreich, ' + (result.errors || 0) + ' Fehler');
     await loadBelege();
     loadDATEVStatus();
   } catch(e) { alert('Sync-Fehler: ' + e.message); }
 }
 
 async function exportCSV() {
-  if (!state.steuerjahrId) return alert('Steuerjahr wählen');
-  window.open(`/api/datev/export/csv/${state.steuerjahrId}?nur_gepruefte=false`, '_blank');
+  if (!state.steuerjahrId) return alert('Steuerjahr wahlen');
+  window.open('/api/datev/export/csv/' + state.steuerjahrId + '?nur_gepruefte=false', '_blank');
 }
 
 // ── Boot ─────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
 
 // Auto-refresh every 10s if processing
-setInterval(() => {
-  if (state.belege.some(b => ['ocr_laeuft','extraktion_laeuft'].includes(b.status))) {
+setInterval(function() {
+  if (state.belege.some(function(b) { return b.status === 'ocr_laeuft' || b.status === 'extraktion_laeuft'; })) {
     loadBelege();
   }
 }, 10000);
