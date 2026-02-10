@@ -1,7 +1,9 @@
-"""BelegSync – Extraction Service (Ollama-only).
+"""BelegSync – Extraction Service mit LLM-nativem Source Grounding.
 
-Extrahiert steuerlich relevante Daten aus OCR-Text via Llama 3.1 8B.
-Source Grounding: Jeder extrahierte Wert wird auf seine Position im OCR-Text gemappt.
+Extrahiert steuerlich relevante Daten aus OCR-Text via Ollama (Llama 3.1 8B).
+Eigenes Source Grounding: Das LLM liefert für jeden Wert den exakten Quelltext-
+Ausschnitt aus dem OCR-Text. So kann der Steuerberater jeden extrahierten Wert
+direkt im Originaldokument nachvollziehen (Explainable AI).
 """
 import os, json, re, logging
 from typing import Optional
@@ -14,63 +16,56 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b-instruct-q4_K_M")
 
 
 # ════════════════════════════════════════════
-#  Ollama Extraction – optimierter Prompt
+#  Ollama Extraction – Prompt mit Source Grounding
 # ════════════════════════════════════════════
 
 SYSTEM_PROMPT = """Du bist ein Experte für deutsche Steuerbelege. Du analysierst OCR-Text und extrahierst steuerlich relevante Daten als JSON.
 
 REGELN:
 - Antworte NUR mit einem JSON-Objekt, kein anderer Text
-- Deutsche Zahlen (1.234,56) als Dezimalzahl im JSON: 1234.56
+- Deutsche Zahlen (1.234,56) als Dezimalzahl im JSON-Wert: 1234.56
 - Unbekannte Felder: null (nicht "null", nicht "", nicht 0)
 - Datum im Format TT.MM.JJJJ
 - Bei Handwerkerrechnungen/Nebenkostenabrechnungen: trenne Arbeitskosten (§35a absetzbar) von Materialkosten (nicht absetzbar)
 
+QUELLENNACHWEISE (Source Grounding):
+- Für JEDEN extrahierten Wert gib zusätzlich "quelle" an
+- "quelle" = der EXAKTE Textausschnitt aus dem OCR-Text, aus dem du den Wert abgeleitet hast
+- Kopiere den Text GENAU wie er im OCR-Text steht (inkl. Sonderzeichen, Leerzeichen)
+- Für abgeleitete Felder (beleg_typ, steuer_kategorie, skr03_konto): quelle = null
+- Format pro Feld: {"wert": <extrahierter_wert>, "quelle": "<exakter_OCR_text>" oder null}
+
 FELDER:
 - beleg_typ: rechnung | handwerkerrechnung | lohnsteuerbescheinigung | spendenbescheinigung | versicherungsnachweis | kontoauszug | nebenkostenabrechnung | arztrechnung | fahrtkosten | bewirtungsbeleg | sonstig
-- aussteller: Name der Firma/Person die den Beleg ausgestellt hat
-- beschreibung: Kurzbeschreibung des Belegs (max 100 Zeichen)
+- aussteller: Name der Firma/Person
+- beschreibung: Kurzbeschreibung (max 100 Zeichen)
 - betrag_brutto: Gesamtbetrag inkl. MwSt
-- betrag_netto: Nettobetrag ohne MwSt (null falls nicht angegeben)
-- mwst_satz: MwSt-Prozentsatz (7 oder 19, null falls nicht erkennbar)
+- betrag_netto: Nettobetrag ohne MwSt
+- mwst_satz: MwSt-Prozentsatz (7 oder 19)
 - mwst_betrag: MwSt-Betrag in Euro
 - datum_beleg: Rechnungs-/Belegdatum
 - rechnungsnummer: Rechnungs- oder Belegnummer
-- steuer_kategorie: Eine der folgenden Kategorien:
-  Werbungskosten | Sonderausgaben | Außergewöhnliche Belastungen | Haushaltsnahe Dienstleistungen §35a | Handwerkerleistungen §35a | Vorsorgeaufwendungen | Spenden und Mitgliedsbeiträge | Einkünfte nichtselbständige Arbeit | Einkünfte selbständige Arbeit | Einkünfte Vermietung/Verpachtung
-- skr03_konto: 4-stelliges SKR03-Konto (z.B. 4946 für Fremdleistungen, 4210 für Miete)
-- arbeitskosten_35a: Nur der Arbeits-/Lohnanteil bei Handwerkerrechnungen oder haushaltsnahen Dienstleistungen (§35a EStG absetzbar)
-- materialkosten: Nur der Materialanteil (NICHT absetzbar nach §35a)"""
+- steuer_kategorie: Werbungskosten | Sonderausgaben | Außergewöhnliche Belastungen | Haushaltsnahe Dienstleistungen §35a | Handwerkerleistungen §35a | Vorsorgeaufwendungen | Spenden und Mitgliedsbeiträge | Einkünfte nichtselbständige Arbeit | Einkünfte selbständige Arbeit | Einkünfte Vermietung/Verpachtung
+- skr03_konto: 4-stelliges SKR03-Konto
+- arbeitskosten_35a: Arbeits-/Lohnanteil (§35a absetzbar)
+- materialkosten: Materialanteil (NICHT absetzbar)"""
 
 ONE_SHOT_EXAMPLE = """
 BEISPIEL:
-OCR-Text: "Rechnung Nr. 2024-0815\\nMalermeister Schmidt GmbH\\nAnstricharbeiten Wohnzimmer\\nArbeitskosten: 1.200,00 €\\nMaterial: 340,00 €\\nNetto: 1.540,00 €\\nMwSt 19%: 292,60 €\\nBrutto: 1.832,60 €\\nDatum: 15.03.2024"
+OCR-Text: "Rechnung Nr. 2024-0815\\nMalermeister Schmidt GmbH\\nHauptstr. 12, 20095 Hamburg\\nAnstricharbeiten Wohnzimmer\\nArbeitskosten: 1.200,00 €\\nMaterial: 340,00 €\\nNetto: 1.540,00 €\\nMwSt 19%: 292,60 €\\nBrutto: 1.832,60 €\\nDatum: 15.03.2024"
 
 Antwort:
-{"beleg_typ": "handwerkerrechnung", "aussteller": "Malermeister Schmidt GmbH", "beschreibung": "Anstricharbeiten Wohnzimmer", "betrag_brutto": 1832.60, "betrag_netto": 1540.00, "mwst_satz": 19, "mwst_betrag": 292.60, "datum_beleg": "15.03.2024", "rechnungsnummer": "2024-0815", "steuer_kategorie": "Handwerkerleistungen §35a", "skr03_konto": "4946", "arbeitskosten_35a": 1200.00, "materialkosten": 340.00}
+{"beleg_typ": {"wert": "handwerkerrechnung", "quelle": null}, "aussteller": {"wert": "Malermeister Schmidt GmbH", "quelle": "Malermeister Schmidt GmbH"}, "beschreibung": {"wert": "Anstricharbeiten Wohnzimmer", "quelle": "Anstricharbeiten Wohnzimmer"}, "betrag_brutto": {"wert": 1832.60, "quelle": "Brutto: 1.832,60 \\u20ac"}, "betrag_netto": {"wert": 1540.00, "quelle": "Netto: 1.540,00 \\u20ac"}, "mwst_satz": {"wert": 19, "quelle": "MwSt 19%"}, "mwst_betrag": {"wert": 292.60, "quelle": "MwSt 19%: 292,60 \\u20ac"}, "datum_beleg": {"wert": "15.03.2024", "quelle": "Datum: 15.03.2024"}, "rechnungsnummer": {"wert": "2024-0815", "quelle": "Rechnung Nr. 2024-0815"}, "steuer_kategorie": {"wert": "Handwerkerleistungen \\u00a735a", "quelle": null}, "skr03_konto": {"wert": "4946", "quelle": null}, "arbeitskosten_35a": {"wert": 1200.00, "quelle": "Arbeitskosten: 1.200,00 \\u20ac"}, "materialkosten": {"wert": 340.00, "quelle": "Material: 340,00 \\u20ac"}}
 """
 
-USER_PROMPT = """Analysiere diesen OCR-Text und extrahiere die steuerlich relevanten Daten als JSON:
+USER_PROMPT = """Analysiere diesen OCR-Text und extrahiere die steuerlich relevanten Daten als JSON mit Quellennachweisen:
 
 {text}"""
 
 
-def _clean_extracted_data(data: dict) -> dict:
-    """Bereinige LLM-Output: String-Nulls, leere Strings, ungültige Werte."""
-    cleaned = {}
-    for key, value in data.items():
-        # "null", "None", "", "N/A" → None
-        if isinstance(value, str) and value.strip().lower() in ("null", "none", "", "n/a", "nicht angegeben", "unbekannt"):
-            cleaned[key] = None
-        # 0 bei optionalen Geldbeträgen → None (LLM gibt oft 0.00 statt null)
-        elif isinstance(value, (int, float)) and value == 0 and key in (
-            "betrag_netto", "mwst_betrag", "mwst_satz", "arbeitskosten_35a", "materialkosten"
-        ):
-            cleaned[key] = None
-        else:
-            cleaned[key] = value
-    return cleaned
-
+# ════════════════════════════════════════════
+#  Response Parsing & Cleaning
+# ════════════════════════════════════════════
 
 def _parse_json_from_llm(raw: str) -> Optional[dict]:
     """Robust JSON-Parsing aus LLM-Output (mit/ohne Markdown-Fences)."""
@@ -102,70 +97,205 @@ def _parse_json_from_llm(raw: str) -> Optional[dict]:
     return None
 
 
-async def extract_with_ollama(ocr_text: str, retry: bool = True) -> dict:
-    """Extrahiert steuerlich relevante Daten via Ollama mit post-hoc Source Grounding."""
-    prompt = f"{SYSTEM_PROMPT}\n{ONE_SHOT_EXAMPLE}\n{USER_PROMPT.format(text=ocr_text[:4000])}"
+def _unwrap_sourced_response(data: dict) -> tuple:
+    """Entpacke {wert, quelle}-Paare in flache Werte + Quellen-Dict.
 
-    try:
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            resp = await client.post(f"{OLLAMA_URL}/api/generate", json={
-                "model": OLLAMA_MODEL,
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": 0.1, "num_predict": 1500}
-            })
-            resp.raise_for_status()
-            raw = resp.json().get("response", "")
-            logger.info(f"Ollama raw response length: {len(raw)}")
+    Tolerant: Akzeptiert gemischt flat/nested Antworten.
 
-            data = _parse_json_from_llm(raw)
+    Returns:
+        (flat_data, source_quotes) – z.B.:
+        flat_data:      {"aussteller": "Schmidt GmbH", "betrag_brutto": 1832.60}
+        source_quotes:  {"aussteller": "Malermeister Schmidt GmbH", "betrag_brutto": "Brutto: 1.832,60 €"}
+    """
+    flat = {}
+    quotes = {}
+    for key, value in data.items():
+        if isinstance(value, dict) and "wert" in value:
+            # Nested {wert, quelle} Format
+            flat[key] = value["wert"]
+            if value.get("quelle"):
+                quotes[key] = str(value["quelle"])
+        else:
+            # Flat value (LLM hat quelle-Anweisung ignoriert)
+            flat[key] = value
+    return flat, quotes
 
-            # Retry einmal bei Parse-Fehler (LLM kann inkonsistent sein)
-            if data is None and retry:
-                logger.warning("JSON parse failed, retrying extraction...")
-                return await extract_with_ollama(ocr_text, retry=False)
 
-            if data is None:
-                logger.error(f"Could not parse JSON from Ollama response: {raw[:200]}")
-                return {
-                    "extrahierte_daten": {},
-                    "quellreferenzen": [],
-                    "methode": "ollama_direkt",
-                    "konfidenz": "niedrig"
-                }
-
-            data = _clean_extracted_data(data)
-            spans = _build_source_spans(ocr_text, data)
-
-            return {
-                "extrahierte_daten": data,
-                "quellreferenzen": spans,
-                "methode": "ollama_direkt",
-                "konfidenz": _assess_confidence(data)
-            }
-
-    except httpx.ConnectError:
-        logger.error(f"Ollama not reachable at {OLLAMA_URL}")
-    except httpx.TimeoutException:
-        logger.error(f"Ollama timeout after 180s")
-    except Exception as e:
-        logger.error(f"Ollama error: {e}")
-
-    return {
-        "extrahierte_daten": {},
-        "quellreferenzen": [],
-        "methode": "fehler",
-        "konfidenz": "niedrig"
-    }
+def _clean_extracted_data(data: dict) -> dict:
+    """Bereinige LLM-Output: String-Nulls, leere Strings, ungültige Werte."""
+    cleaned = {}
+    for key, value in data.items():
+        # "null", "None", "", "N/A" → None
+        if isinstance(value, str) and value.strip().lower() in ("null", "none", "", "n/a", "nicht angegeben", "unbekannt"):
+            cleaned[key] = None
+        # 0 bei optionalen Geldbeträgen → None (LLM gibt oft 0.00 statt null)
+        elif isinstance(value, (int, float)) and value == 0 and key in (
+            "betrag_netto", "mwst_betrag", "mwst_satz", "arbeitskosten_35a", "materialkosten"
+        ):
+            cleaned[key] = None
+        else:
+            cleaned[key] = value
+    return cleaned
 
 
 # ════════════════════════════════════════════
-#  Post-hoc Source Grounding
+#  LLM-natives Source Grounding (Quellen-Matching)
+# ════════════════════════════════════════════
+
+def _build_source_spans_from_quotes(ocr_text: str, quotes: dict) -> list:
+    """Lokalisiert LLM-Quellennachweise im OCR-Text.
+
+    Das LLM hat für jeden Wert ein 'quelle'-Feld geliefert (exakter Textausschnitt).
+    Hier finden wir die Position dieses Ausschnitts im Original-OCR-Text.
+    """
+    spans = []
+    for feld, quote in quotes.items():
+        if not quote or not isinstance(quote, str) or len(quote.strip()) < 2:
+            continue
+
+        span = _locate_quote_in_text(ocr_text, quote.strip(), feld)
+        if span:
+            spans.append(span)
+        else:
+            logger.debug(f"Source quote not found for '{feld}': '{quote[:50]}'")
+
+    return spans
+
+
+def _locate_quote_in_text(ocr_text: str, quote: str, feld: str) -> Optional[dict]:
+    """4-stufige Matching-Kaskade: Findet ein LLM-Zitat im OCR-Text.
+
+    Tier 1: Exakte Suche
+    Tier 2: Case-insensitive
+    Tier 3: Normalisiert (Whitespace kollabiert)
+    Tier 4: Fuzzy Sliding Window (Bigram-Dice ≥ 0.80)
+    """
+    # Tier 1: Exakt
+    idx = ocr_text.find(quote)
+    if idx >= 0:
+        return {"start": idx, "end": idx + len(quote), "text": quote, "feld": feld}
+
+    # Tier 2: Case-insensitive
+    idx = ocr_text.lower().find(quote.lower())
+    if idx >= 0:
+        matched = ocr_text[idx:idx + len(quote)]
+        return {"start": idx, "end": idx + len(quote), "text": matched, "feld": feld}
+
+    # Tier 3: Normalisiert (Whitespace, Zeilenumbrüche)
+    norm_quote = _normalize_text(quote)
+    norm_ocr = _normalize_text(ocr_text)
+    norm_idx = norm_ocr.find(norm_quote)
+    if norm_idx >= 0:
+        orig_start, orig_end = _map_normalized_pos(ocr_text, norm_ocr, norm_idx, len(norm_quote))
+        matched = ocr_text[orig_start:orig_end]
+        return {"start": orig_start, "end": orig_end, "text": matched, "feld": feld}
+
+    # Tier 4: Fuzzy (nur für nicht-triviale Strings)
+    if len(quote) >= 5:
+        result = _fuzzy_slide_match(ocr_text, quote, threshold=0.80)
+        if result:
+            start, end = result
+            return {"start": start, "end": end, "text": ocr_text[start:end], "feld": feld}
+
+    return None
+
+
+def _normalize_text(text: str) -> str:
+    """Normalisiert Text: Whitespace kollabieren, Lowercase."""
+    return re.sub(r'\s+', ' ', text).strip().lower()
+
+
+def _map_normalized_pos(original: str, normalized: str, norm_start: int, norm_len: int) -> tuple:
+    """Mappt Position im normalisierten Text zurück auf Original-Positionen.
+
+    Berücksichtigt kollabierte Whitespace-Sequenzen.
+    """
+    orig_pos = 0
+    norm_pos = 0
+    orig_start = None
+
+    while norm_pos < len(normalized) and orig_pos < len(original):
+        if norm_pos == norm_start and orig_start is None:
+            orig_start = orig_pos
+        if norm_pos == norm_start + norm_len:
+            return (orig_start or 0, orig_pos)
+
+        if normalized[norm_pos] == ' ' and original[orig_pos] in (' ', '\t', '\n', '\r'):
+            norm_pos += 1
+            while orig_pos < len(original) and original[orig_pos] in (' ', '\t', '\n', '\r'):
+                orig_pos += 1
+        else:
+            norm_pos += 1
+            orig_pos += 1
+
+    if orig_start is not None:
+        return (orig_start, orig_pos)
+    return (0, min(norm_len, len(original)))
+
+
+def _fuzzy_slide_match(ocr_text: str, quote: str, threshold: float = 0.80) -> Optional[tuple]:
+    """Sliding-Window Fuzzy-Match mit Bigram-Dice-Koeffizient.
+
+    Schiebt ein Fenster (±20% der Quote-Länge) über den OCR-Text und
+    findet die Position mit der höchsten Ähnlichkeit.
+    """
+    qlen = len(quote)
+    if qlen < 5 or len(ocr_text) < qlen:
+        return None
+
+    quote_lower = quote.lower()
+    text_lower = ocr_text.lower()
+    quote_bigrams = _bigrams(quote_lower)
+
+    if not quote_bigrams:
+        return None
+
+    best_ratio = 0.0
+    best_pos = None
+
+    # Fenstergrößen: exakt, ±10%, ±20%
+    window_sizes = sorted(set([
+        qlen,
+        max(3, int(qlen * 0.9)),
+        min(len(ocr_text), int(qlen * 1.1)),
+        max(3, int(qlen * 0.8)),
+        min(len(ocr_text), int(qlen * 1.2)),
+    ]))
+
+    for window_size in window_sizes:
+        if window_size > len(ocr_text):
+            continue
+        for i in range(0, len(ocr_text) - window_size + 1, 1):
+            candidate = text_lower[i:i + window_size]
+            cand_bigrams = _bigrams(candidate)
+            if not cand_bigrams:
+                continue
+
+            # Dice-Koeffizient
+            overlap = len(quote_bigrams & cand_bigrams)
+            ratio = 2.0 * overlap / (len(quote_bigrams) + len(cand_bigrams))
+
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_pos = (i, i + window_size)
+
+    if best_ratio >= threshold and best_pos:
+        return best_pos
+    return None
+
+
+def _bigrams(s: str) -> set:
+    """Erzeugt Bigram-Set aus einem String."""
+    return set(s[i:i+2] for i in range(len(s) - 1)) if len(s) >= 2 else set()
+
+
+# ════════════════════════════════════════════
+#  Post-hoc Source Grounding (Fallback)
 # ════════════════════════════════════════════
 
 def _build_source_spans(ocr_text: str, attrs: dict) -> list:
-    """Findet extrahierte Werte im OCR-Text und erstellt Source-Grounding-Spans.
-    Jeder Span zeigt: wo im Originaltext steht der extrahierte Wert."""
+    """Fallback: Findet extrahierte Werte im OCR-Text per Textsuche.
+    Wird genutzt wenn das LLM keine quelle-Felder liefert."""
     spans = []
     text_lower = ocr_text.lower()
 
@@ -203,19 +333,18 @@ def _build_source_spans(ocr_text: str, attrs: dict) -> list:
                     spans.append({"start": idx, "end": idx + len(variant), "text": variant, "feld": feld})
                     break
             else:
-                # Auch ohne Tausender-Trenner suchen (z.B. "1200,00" statt "1.200,00")
+                # Ohne Tausender-Trenner (z.B. "1200,00")
                 simple = value_str.split(".")[0] + "," + (value_str.split(".")[1] if "." in value_str else "00")
                 idx = ocr_text.find(simple)
                 if idx >= 0:
                     spans.append({"start": idx, "end": idx + len(simple), "text": simple, "feld": feld})
 
-        # Case-insensitive für Textfelder + Teilstring-Matching
+        # Case-insensitive für Textfelder
         if feld in ("aussteller", "rechnungsnummer", "beschreibung"):
             idx = text_lower.find(value_str.lower())
             if idx >= 0:
                 spans.append({"start": idx, "end": idx + len(value_str), "text": ocr_text[idx:idx+len(value_str)], "feld": feld})
             elif feld == "aussteller" and len(value_str) > 5:
-                # Fuzzy: Suche nach den ersten 2 Wörtern des Ausstellers (OCR-Fehler-tolerant)
                 words = value_str.split()[:2]
                 if len(words) >= 2:
                     pattern = re.escape(words[0]) + r'[\s\-]+' + re.escape(words[1])
@@ -234,22 +363,108 @@ def _to_german_number(n: str) -> str:
         decimal_part = round(f - integer_part, 2)
         formatted_int = f"{integer_part:,}".replace(",", ".")
         if decimal_part > 0:
-            dec_str = f"{decimal_part:.2f}"[2:]  # ".56" → "56"
+            dec_str = f"{decimal_part:.2f}"[2:]
             return f"{formatted_int},{dec_str}"
         return f"{formatted_int},00"
     except (ValueError, TypeError):
         return n
 
 
-def _assess_confidence(attrs: dict) -> str:
-    """Bewertet Extraktionsqualität anhand Feld-Vollständigkeit."""
+# ════════════════════════════════════════════
+#  Confidence Assessment
+# ════════════════════════════════════════════
+
+def _assess_confidence(attrs: dict, spans: list = None) -> str:
+    """Bewertet Extraktionsqualität: Feld-Vollständigkeit + Source Grounding."""
     required = ["beleg_typ", "betrag_brutto", "aussteller", "datum_beleg"]
     found = sum(1 for f in required if attrs.get(f) is not None)
-    if found >= 4:
+
+    # Bonus: Wie viele Felder sind source-gegrundet?
+    grounded = set(s["feld"] for s in (spans or []))
+    grounded_count = sum(1 for f in ["betrag_brutto", "aussteller", "datum_beleg"] if f in grounded)
+
+    if found >= 4 and grounded_count >= 2:
         return "hoch"
+    elif found >= 3:
+        return "mittel"
     elif found >= 2:
         return "mittel"
     return "niedrig"
+
+
+# ════════════════════════════════════════════
+#  Ollama Extraction
+# ════════════════════════════════════════════
+
+async def extract_with_ollama(ocr_text: str, retry: bool = True) -> dict:
+    """Extrahiert Daten via Ollama mit LLM-nativem Source Grounding."""
+    prompt = f"{SYSTEM_PROMPT}\n{ONE_SHOT_EXAMPLE}\n{USER_PROMPT.format(text=ocr_text[:4000])}"
+
+    try:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            resp = await client.post(f"{OLLAMA_URL}/api/generate", json={
+                "model": OLLAMA_MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.1, "num_predict": 2000}
+            })
+            resp.raise_for_status()
+            raw = resp.json().get("response", "")
+            logger.info(f"Ollama raw response length: {len(raw)}")
+
+            data = _parse_json_from_llm(raw)
+
+            # Retry einmal bei Parse-Fehler
+            if data is None and retry:
+                logger.warning("JSON parse failed, retrying extraction...")
+                return await extract_with_ollama(ocr_text, retry=False)
+
+            if data is None:
+                logger.error(f"Could not parse JSON from Ollama response: {raw[:200]}")
+                return {
+                    "extrahierte_daten": {},
+                    "quellreferenzen": [],
+                    "methode": "ollama_direkt",
+                    "konfidenz": "niedrig"
+                }
+
+            # Entpacke {wert, quelle}-Paare (tolerant bei flat responses)
+            flat_data, source_quotes = _unwrap_sourced_response(data)
+            flat_data = _clean_extracted_data(flat_data)
+
+            # Primär: LLM-native Source Spans aus quelle-Feldern
+            spans = _build_source_spans_from_quotes(ocr_text, source_quotes)
+            grounded_fields = {s["feld"] for s in spans}
+
+            logger.info(f"LLM source grounding: {len(spans)} spans from {len(source_quotes)} quotes")
+
+            # Fallback: Post-hoc Matching für un-gegrundete Felder
+            fallback_data = {k: v for k, v in flat_data.items() if k not in grounded_fields}
+            if fallback_data:
+                fallback_spans = _build_source_spans(ocr_text, fallback_data)
+                spans.extend(fallback_spans)
+                logger.info(f"Fallback grounding: {len(fallback_spans)} additional spans")
+
+            return {
+                "extrahierte_daten": flat_data,
+                "quellreferenzen": spans,
+                "methode": "ollama_direkt",
+                "konfidenz": _assess_confidence(flat_data, spans)
+            }
+
+    except httpx.ConnectError:
+        logger.error(f"Ollama not reachable at {OLLAMA_URL}")
+    except httpx.TimeoutException:
+        logger.error(f"Ollama timeout after 180s")
+    except Exception as e:
+        logger.error(f"Ollama error: {e}")
+
+    return {
+        "extrahierte_daten": {},
+        "quellreferenzen": [],
+        "methode": "fehler",
+        "konfidenz": "niedrig"
+    }
 
 
 # ════════════════════════════════════════════
