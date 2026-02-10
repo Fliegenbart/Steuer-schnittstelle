@@ -6,6 +6,10 @@
 <title>BelegSync – KI-Belegverarbeitung</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+</script>
 <style>
 /* ── Light Mode (Default) ──────────────────────── */
 :root {
@@ -602,6 +606,82 @@ tr { cursor: pointer; transition: background var(--transition); }
   transition: opacity 0.3s ease;
 }
 .connector-line.active { opacity: 1; }
+
+/* ── Document Viewer Tabs ──────────── */
+.doc-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+.doc-tab {
+  flex: 1;
+  padding: 8px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: center;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  color: var(--text-dim);
+  transition: all var(--transition);
+  border: none;
+  background: transparent;
+  font-family: var(--font);
+}
+.doc-tab:hover { color: var(--text); }
+.doc-tab.active {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── PDF/Image Viewer Container ────── */
+.pdf-container {
+  position: relative;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  max-height: 520px;
+  overflow-y: auto;
+}
+.pdf-canvas-wrap {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+.pdf-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.pdf-img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.bbox-overlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.bbox-overlay rect {
+  pointer-events: all;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.bbox-overlay rect.dimmed { opacity: 0.1; }
+.bbox-overlay rect.active-bbox {
+  animation: bboxPulse 1.5s ease-in-out 2;
+}
+@keyframes bboxPulse {
+  0%, 100% { stroke-width: 2; }
+  50% { stroke-width: 4; }
+}
 
 /* ── Legende ───────────────────────── */
 .legend {
@@ -1337,8 +1417,19 @@ function getFeldLabel(feld) {
 
 async function openBeleg(id) {
   state.activeField = null;
+  state.activeTab = 'doc';  // default: Dokument tab
+  state.currentBeleg = null;
   var b = await api('/api/belege/' + id);
+  state.currentBeleg = b;
   document.getElementById('modal-title').textContent = b.dateiname;
+
+  // Determine if document view is available
+  var hasFile = b.dateipfad && b.dateipfad.length > 5;
+  var fileUrl = hasFile ? getFileUrl(b.dateipfad) : null;
+  var hasBboxes = hasFile && b.quellreferenzen && b.quellreferenzen.some(function(s) { return s.bbox; });
+
+  // If no file, default to text tab
+  if (!hasFile) state.activeTab = 'text';
 
   // Build source-grounded OCR view
   var ocrHtml = '<p style="color:var(--text-dim);">Kein OCR-Text</p>';
@@ -1388,6 +1479,16 @@ async function openBeleg(id) {
   });
   legendHtml += '</div>';
 
+  // Tab buttons
+  var tabsHtml = '<div class="doc-tabs">' +
+    '<button class="doc-tab' + (state.activeTab === 'doc' ? ' active' : '') + '" onclick="switchDocTab(\'doc\')"' + (!hasFile ? ' disabled style="opacity:0.4;cursor:not-allowed;"' : '') + '>' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Dokument' +
+    '</button>' +
+    '<button class="doc-tab' + (state.activeTab === 'text' ? ' active' : '') + '" onclick="switchDocTab(\'text\')">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>Text' +
+    '</button>' +
+  '</div>';
+
   document.getElementById('modal-body').innerHTML =
     '<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">' +
       statusLabel(b.status) +
@@ -1399,8 +1500,13 @@ async function openBeleg(id) {
     '<div class="source-view" id="source-view-container">' +
       '<svg class="source-connector-svg" id="connector-svg"></svg>' +
       '<div>' +
-        '<div style="font-size:0.74rem;font-weight:600;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">OCR-Text mit Quellenreferenzen</div>' +
-        '<div class="ocr-panel" id="ocr-panel">' + ocrHtml + '</div>' +
+        tabsHtml +
+        '<div id="doc-tab-content" style="display:' + (state.activeTab === 'doc' ? 'block' : 'none') + ';">' +
+          '<div class="pdf-container" id="pdf-container"><div class="pdf-canvas-wrap" id="pdf-canvas-wrap"><div style="padding:40px;text-align:center;color:var(--text-dim);">Dokument wird geladen...</div></div></div>' +
+        '</div>' +
+        '<div id="text-tab-content" style="display:' + (state.activeTab === 'text' ? 'block' : 'none') + ';">' +
+          '<div class="ocr-panel" id="ocr-panel">' + ocrHtml + '</div>' +
+        '</div>' +
       '</div>' +
       '<div>' +
         '<div style="font-size:0.74rem;font-weight:600;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Extrahierte Daten</div>' +
@@ -1422,12 +1528,17 @@ async function openBeleg(id) {
 
   document.getElementById('beleg-modal').classList.add('show');
 
-  // Setup click-outside to deselect
+  // Setup click-outside to deselect on text panel
   document.getElementById('ocr-panel').addEventListener('click', function(e) {
     if (!e.target.classList.contains('ocr-highlight')) {
       clearSourceSelection();
     }
   });
+
+  // Render document if doc tab is active and file exists
+  if (state.activeTab === 'doc' && hasFile) {
+    renderDocument(b, fileUrl);
+  }
 }
 
 function buildSourceGroundedText(text, spans) {
@@ -1458,6 +1569,167 @@ function buildSourceGroundedText(text, spans) {
 function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escAttr(s) { return s.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
+// ── Document Viewer (PDF.js + Image) ──
+
+function getFileUrl(dateipfad) {
+  // Convert absolute server path to relative URL: "/uploads/1/2024/abc_file.pdf"
+  if (!dateipfad) return null;
+  var parts = dateipfad.split('uploads');
+  if (parts.length >= 2) return '/uploads' + parts[parts.length - 1];
+  return '/uploads/' + dateipfad;
+}
+
+function switchDocTab(tab) {
+  state.activeTab = tab;
+  state.activeField = null;
+  clearSourceSelection();
+
+  // Update tab buttons
+  document.querySelectorAll('.doc-tab').forEach(function(el, i) {
+    el.classList.toggle('active', (i === 0 && tab === 'doc') || (i === 1 && tab === 'text'));
+  });
+
+  // Toggle content
+  var docContent = document.getElementById('doc-tab-content');
+  var textContent = document.getElementById('text-tab-content');
+  if (docContent) docContent.style.display = tab === 'doc' ? 'block' : 'none';
+  if (textContent) textContent.style.display = tab === 'text' ? 'block' : 'none';
+
+  // Render document if switching to doc tab for the first time
+  if (tab === 'doc' && state.currentBeleg && state.currentBeleg.dateipfad) {
+    var wrap = document.getElementById('pdf-canvas-wrap');
+    if (wrap && !wrap.querySelector('canvas') && !wrap.querySelector('img')) {
+      renderDocument(state.currentBeleg, getFileUrl(state.currentBeleg.dateipfad));
+    }
+  }
+}
+
+async function renderDocument(beleg, fileUrl) {
+  var wrap = document.getElementById('pdf-canvas-wrap');
+  if (!wrap || !fileUrl) return;
+
+  var ext = beleg.dateityp || '';
+  var isPdf = ext === 'pdf';
+  var isImage = ['jpg','jpeg','png','tiff','bmp','webp'].indexOf(ext) >= 0;
+
+  wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-dim);">Wird geladen...</div>';
+
+  try {
+    if (isPdf && window.pdfjsLib) {
+      // Render PDF page 1 via PDF.js
+      var pdf = await pdfjsLib.getDocument(fileUrl).promise;
+      var page = await pdf.getPage(1);
+      var viewport = page.getViewport({ scale: 1 });
+
+      // Scale to fit container width
+      var container = document.getElementById('pdf-container');
+      var containerWidth = container.clientWidth - 2;  // minus borders
+      var scale = containerWidth / viewport.width;
+      var scaledViewport = page.getViewport({ scale: scale });
+
+      wrap.innerHTML = '';
+      var canvas = document.createElement('canvas');
+      canvas.className = 'pdf-canvas';
+      canvas.width = scaledViewport.width;
+      canvas.height = scaledViewport.height;
+      wrap.appendChild(canvas);
+
+      var ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
+
+      // Render bounding box overlay
+      renderBboxOverlay(beleg, scaledViewport.width, scaledViewport.height, 1);
+
+    } else if (isImage) {
+      // Render image directly
+      wrap.innerHTML = '';
+      var img = document.createElement('img');
+      img.className = 'pdf-img';
+      img.src = fileUrl;
+      img.onload = function() {
+        renderBboxOverlay(beleg, img.clientWidth, img.clientHeight, 1);
+      };
+      img.onerror = function() {
+        wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-dim);">Bild konnte nicht geladen werden</div>';
+      };
+      wrap.appendChild(img);
+
+    } else if (isPdf && !window.pdfjsLib) {
+      // PDF.js not loaded – fallback
+      wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-dim);">PDF.js nicht verfuegbar – wechsle zum Text-Tab</div>';
+      switchDocTab('text');
+
+    } else {
+      wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-dim);">Dateityp "' + ext + '" nicht unterstuetzt</div>';
+    }
+  } catch(e) {
+    console.error('Document render error:', e);
+    wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-dim);">Fehler beim Laden: ' + escHtml(e.message || 'Unbekannt') + '</div>';
+  }
+}
+
+function renderBboxOverlay(beleg, displayWidth, displayHeight, pageNum) {
+  var wrap = document.getElementById('pdf-canvas-wrap');
+  if (!wrap) return;
+
+  // Remove existing overlay
+  var existing = wrap.querySelector('.bbox-overlay');
+  if (existing) existing.remove();
+
+  var spans = beleg.quellreferenzen || [];
+  var spansWithBbox = spans.filter(function(s) { return s.bbox && s.bbox.page === pageNum; });
+  if (spansWithBbox.length === 0) return;
+
+  // Get original page dimensions from ocr_daten
+  var ocrPage = null;
+  if (beleg.ocr_daten && beleg.ocr_daten.pages) {
+    ocrPage = beleg.ocr_daten.pages.find(function(p) { return p.page === pageNum; });
+  }
+  if (!ocrPage) return;
+
+  var scaleX = displayWidth / ocrPage.width;
+  var scaleY = displayHeight / ocrPage.height;
+
+  // Create SVG overlay
+  var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'bbox-overlay');
+  svg.setAttribute('viewBox', '0 0 ' + displayWidth + ' ' + displayHeight);
+  svg.setAttribute('width', displayWidth);
+  svg.setAttribute('height', displayHeight);
+
+  spansWithBbox.forEach(function(span) {
+    var bb = span.bbox;
+    var x = bb.x * scaleX;
+    var y = bb.y * scaleY;
+    var w = bb.w * scaleX;
+    var h = bb.h * scaleY;
+    var color = getFeldColor(span.feld);
+
+    var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', x);
+    rect.setAttribute('y', y);
+    rect.setAttribute('width', w);
+    rect.setAttribute('height', h);
+    rect.setAttribute('fill', color);
+    rect.setAttribute('fill-opacity', '0.15');
+    rect.setAttribute('stroke', color);
+    rect.setAttribute('stroke-width', '2');
+    rect.setAttribute('rx', '3');
+    rect.setAttribute('data-feld', span.feld || '');
+    rect.setAttribute('data-bbox-feld', span.feld || '');
+    rect.onclick = function(e) { e.stopPropagation(); selectSourceField(span.feld); };
+
+    // Tooltip via title element
+    var title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    title.textContent = getFeldLabel(span.feld) + ': ' + (span.text || '').substring(0, 60);
+    rect.appendChild(title);
+
+    svg.appendChild(rect);
+  });
+
+  wrap.appendChild(svg);
+}
+
 // ── Source Grounding Interaktivitat ──
 
 function selectSourceField(feld) {
@@ -1467,23 +1739,45 @@ function selectSourceField(feld) {
   }
   state.activeField = feld;
 
-  // Dim all fields, activate selected
+  // Dim all extraction fields, activate selected
   document.querySelectorAll('.ext-field').forEach(function(el) {
     el.classList.toggle('active-field', el.dataset.fieldKey === feld);
     el.classList.toggle('dimmed', el.dataset.fieldKey !== feld);
   });
 
-  // Dim all OCR highlights, activate matching
-  document.querySelectorAll('.ocr-highlight').forEach(function(el) {
-    var match = el.dataset.feld === feld;
-    el.classList.toggle('active-highlight', match);
-    el.classList.toggle('dimmed', !match);
-    if (match) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  });
+  if (state.activeTab === 'doc') {
+    // Document tab: highlight bounding boxes
+    document.querySelectorAll('.bbox-overlay rect[data-bbox-feld]').forEach(function(el) {
+      var match = el.getAttribute('data-bbox-feld') === feld;
+      if (match) {
+        el.setAttribute('fill-opacity', '0.3');
+        el.setAttribute('stroke-width', '3');
+        el.classList.add('active-bbox');
+        el.classList.remove('dimmed');
+        // Scroll bbox into view
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        el.setAttribute('fill-opacity', '0.05');
+        el.setAttribute('stroke-width', '1');
+        el.classList.add('dimmed');
+        el.classList.remove('active-bbox');
+      }
+    });
+  }
 
-  // Draw connector
+  if (state.activeTab === 'text') {
+    // Text tab: highlight OCR text spans (existing behavior)
+    document.querySelectorAll('.ocr-highlight').forEach(function(el) {
+      var match = el.dataset.feld === feld;
+      el.classList.toggle('active-highlight', match);
+      el.classList.toggle('dimmed', !match);
+      if (match) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }
+
+  // Draw connector (works in both tabs)
   drawConnector(feld);
 }
 
@@ -1499,6 +1793,12 @@ function clearSourceSelection() {
   document.querySelectorAll('.ocr-highlight').forEach(function(el) {
     el.classList.remove('active-highlight', 'dimmed');
   });
+  // Reset bounding boxes to default state
+  document.querySelectorAll('.bbox-overlay rect[data-bbox-feld]').forEach(function(el) {
+    el.setAttribute('fill-opacity', '0.15');
+    el.setAttribute('stroke-width', '2');
+    el.classList.remove('active-bbox', 'dimmed');
+  });
   clearConnectors();
 }
 
@@ -1511,18 +1811,27 @@ function drawConnector(feld) {
   if (!container) return;
   var containerRect = container.getBoundingClientRect();
 
-  // Find field element
+  // Find extraction field element
   var fieldEl = document.querySelector('.ext-field[data-field-key="' + feld + '"]');
-  var highlightEl = document.querySelector('.ocr-highlight.active-highlight[data-feld="' + feld + '"]');
+  if (!fieldEl) return;
 
-  if (!fieldEl || !highlightEl) return;
+  var sourceEl = null;
+  if (state.activeTab === 'doc') {
+    // Doc tab: connect from bounding box
+    sourceEl = document.querySelector('.bbox-overlay rect.active-bbox[data-bbox-feld="' + feld + '"]');
+  }
+  if (!sourceEl && state.activeTab === 'text') {
+    // Text tab: connect from OCR highlight
+    sourceEl = document.querySelector('.ocr-highlight.active-highlight[data-feld="' + feld + '"]');
+  }
+  if (!sourceEl) return;
 
   var fieldRect = fieldEl.getBoundingClientRect();
-  var highlightRect = highlightEl.getBoundingClientRect();
+  var sourceRect = sourceEl.getBoundingClientRect();
 
   // Calculate positions relative to container
-  var x1 = highlightRect.right - containerRect.left;
-  var y1 = highlightRect.top + highlightRect.height / 2 - containerRect.top;
+  var x1 = sourceRect.right - containerRect.left;
+  var y1 = sourceRect.top + sourceRect.height / 2 - containerRect.top;
   var x2 = fieldRect.left - containerRect.left;
   var y2 = fieldRect.top + fieldRect.height / 2 - containerRect.top;
 
@@ -1544,6 +1853,8 @@ function clearConnectors() {
 
 function closeModal() {
   state.activeField = null;
+  state.currentBeleg = null;
+  state.activeTab = 'doc';
   document.getElementById('beleg-modal').classList.remove('show');
 }
 

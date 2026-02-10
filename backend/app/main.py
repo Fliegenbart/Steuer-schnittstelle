@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 
 from backend.app.deps import get_db, engine
+from backend.app.config import settings
 from backend.app.models.database import Mandant, Beleg
 from backend.app.models.schemas import DashboardStats
 from backend.app.routers import mandanten, steuerjahre, belege, datev_sync
@@ -51,6 +52,11 @@ def auto_seed_demo():
         logger.error(f"Auto-Seed fehlgeschlagen: {e}")
     finally:
         db.close()
+
+# Upload files (accessible for PDF/image viewer)
+UPLOAD_PATH = Path(settings.upload_dir).resolve()
+UPLOAD_PATH.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_PATH)), name="uploads")
 
 # Static files
 FRONTEND = Path(__file__).resolve().parent.parent.parent / "frontend"

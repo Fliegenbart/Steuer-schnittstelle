@@ -10,9 +10,11 @@ init_db(engine)
 # Lightweight column migration for existing DBs
 _inspector = inspect(engine)
 _existing_cols = {c["name"] for c in _inspector.get_columns("belege")}
-if "materialkosten" not in _existing_cols:
-    with engine.begin() as conn:
+with engine.begin() as conn:
+    if "materialkosten" not in _existing_cols:
         conn.execute(text("ALTER TABLE belege ADD COLUMN materialkosten FLOAT"))
+    if "ocr_daten" not in _existing_cols:
+        conn.execute(text("ALTER TABLE belege ADD COLUMN ocr_daten JSON"))
 
 def get_db():
     db = SessionLocal()

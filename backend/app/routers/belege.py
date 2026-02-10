@@ -36,9 +36,10 @@ def _run_pipeline(beleg_id: int, db_url: str):
         beleg.status = "ocr_laeuft"
         db.commit()
         try:
-            text, conf = ocr_service.process_file(beleg.dateipfad)
-            beleg.ocr_text = text
-            beleg.ocr_konfidenz = conf
+            ocr_result = ocr_service.process_file(beleg.dateipfad)
+            beleg.ocr_text = ocr_result["text"]
+            beleg.ocr_daten = ocr_result["data"]
+            beleg.ocr_konfidenz = ocr_result["conf"]
             beleg.status = "ocr_fertig"
             db.commit()
         except Exception as e:
@@ -48,7 +49,7 @@ def _run_pipeline(beleg_id: int, db_url: str):
             db.commit()
             return
 
-        if not text or len(text.strip()) < 20:
+        if not ocr_result["text"] or len(ocr_result["text"].strip()) < 20:
             beleg.status = "fehler"
             beleg.pruefnotiz = "OCR lieferte keinen verwertbaren Text"
             db.commit()
@@ -59,7 +60,9 @@ def _run_pipeline(beleg_id: int, db_url: str):
         db.commit()
         try:
             loop = asyncio.new_event_loop()
-            result = loop.run_until_complete(extraction_service.extract_beleg(text))
+            result = loop.run_until_complete(
+                extraction_service.extract_beleg(ocr_result["text"], ocr_result["data"])
+            )
             loop.close()
 
             data = result.get("extrahierte_daten", {})

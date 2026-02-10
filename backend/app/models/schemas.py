@@ -108,7 +108,9 @@ class BelegResponse(BaseModel):
     extrahierte_daten: Optional[dict] = None
     quellreferenzen: Optional[list] = None
     ocr_text: Optional[str] = None
+    ocr_daten: Optional[dict] = None
     ocr_konfidenz: Optional[float] = None
+    dateipfad: Optional[str] = None
     erstellt_am: datetime
     class Config:
         from_attributes = True

@@ -62,6 +62,7 @@ class Beleg(Base):
 
     # OCR
     ocr_text = Column(Text)
+    ocr_daten = Column(JSON)  # {pages: [{page, width, height, words: [{x,y,w,h,text,conf,char_start,char_end}]}]}
     ocr_konfidenz = Column(Float)
 
     # Status-Pipeline

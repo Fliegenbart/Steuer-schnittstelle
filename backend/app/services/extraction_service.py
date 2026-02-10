@@ -494,11 +494,91 @@ def auto_kontierung(beleg_typ: str, mwst_satz: float = None) -> dict:
 
 
 # ════════════════════════════════════════════
+#  BBox Enrichment (Geometric Source Grounding)
+# ════════════════════════════════════════════
+
+def _enrich_spans_with_bboxes(spans: list, ocr_data: dict) -> list:
+    """Enrich text-based source spans with geometric bounding boxes.
+
+    For each span (identified by char_start/end), find all OCR words whose
+    character range overlaps and compute the union bounding box.
+
+    This enables the frontend to highlight the exact region on the
+    original PDF/image where the extracted value appears.
+    """
+    if not ocr_data or "pages" not in ocr_data:
+        return spans
+
+    # Build flat list of all words across pages (already have global char offsets)
+    all_words = []
+    for page in ocr_data["pages"]:
+        page_num = page.get("page", 1)
+        for word in page.get("words", []):
+            if "char_start" in word and "char_end" in word:
+                all_words.append({**word, "page": page_num})
+
+    if not all_words:
+        return spans
+
+    enriched = []
+    for span in spans:
+        span_start = span.get("start")
+        span_end = span.get("end")
+
+        if span_start is None or span_end is None:
+            enriched.append(span)
+            continue
+
+        # Find all words overlapping with this span's character range
+        matching_words = []
+        for w in all_words:
+            w_start = w["char_start"]
+            w_end = w["char_end"]
+            # Overlap check: ranges overlap if start < other_end AND end > other_start
+            if w_start < span_end and w_end > span_start:
+                matching_words.append(w)
+
+        if matching_words:
+            # Compute union bounding box
+            min_x = min(w["x"] for w in matching_words)
+            min_y = min(w["y"] for w in matching_words)
+            max_right = max(w["x"] + w["w"] for w in matching_words)
+            max_bottom = max(w["y"] + w["h"] for w in matching_words)
+            page = matching_words[0]["page"]
+
+            span_with_bbox = {
+                **span,
+                "bbox": {
+                    "x": min_x,
+                    "y": min_y,
+                    "w": max_right - min_x,
+                    "h": max_bottom - min_y,
+                    "page": page,
+                }
+            }
+            enriched.append(span_with_bbox)
+            logger.debug(f"BBox for '{span.get('feld')}': page {page}, ({min_x},{min_y}) {max_right - min_x}x{max_bottom - min_y}")
+        else:
+            # No matching words → keep span without bbox (frontend falls back to text view)
+            enriched.append(span)
+
+    bbox_count = sum(1 for s in enriched if "bbox" in s)
+    logger.info(f"BBox enrichment: {bbox_count}/{len(enriched)} spans got bounding boxes")
+    return enriched
+
+
+# ════════════════════════════════════════════
 #  Main Entry Point
 # ════════════════════════════════════════════
 
-async def extract_beleg(ocr_text: str) -> dict:
-    """Hauptfunktion: Extrahiert Belegdaten via Ollama + Auto-Kontierung."""
+async def extract_beleg(ocr_text: str, ocr_data: dict = None) -> dict:
+    """Hauptfunktion: Extrahiert Belegdaten via Ollama + Auto-Kontierung.
+
+    Args:
+        ocr_text: Full OCR text
+        ocr_data: Optional word-level geometry from OCR service
+                  {pages: [{page, width, height, words: [{x,y,w,h,text,conf,char_start,char_end}]}]}
+    """
     result = await extract_with_ollama(ocr_text)
 
     # Auto-Kontierung falls nicht vom LLM geliefert
@@ -512,6 +592,11 @@ async def extract_beleg(ocr_text: str) -> dict:
         kont = auto_kontierung(data["beleg_typ"], mwst)
         data.update(kont)
         result["extrahierte_daten"] = data
+
+    # Enrich source spans with bounding boxes from OCR geometry
+    spans = result.get("quellreferenzen", [])
+    if ocr_data and spans:
+        result["quellreferenzen"] = _enrich_spans_with_bboxes(spans, ocr_data)
 
     return result
 
