@@ -26,10 +26,11 @@ def _langextract_examples():
         return None
 
     return [
-        lx.ExampleData(
+        lx.data.ExampleData(
             text="Rechnung Nr. 2024-0815\nMalermeister Schmidt GmbH\nHauptstr. 12, 20095 Hamburg\nAnstricharbeiten Wohnzimmer\nArbeitskosten: 1.200,00 €\nMaterial: 340,00 €\nGesamt netto: 1.540,00 €\nMwSt 19%: 292,60 €\nBrutto: 1.832,60 €\nDatum: 15.03.2024",
-            extractions=[lx.Extraction(
-                entity="Handwerkerrechnung",
+            extractions=[lx.data.Extraction(
+                extraction_class="Handwerkerrechnung",
+                extraction_text="Malermeister Schmidt GmbH",
                 attributes={
                     "beleg_typ": "handwerkerrechnung",
                     "aussteller": "Malermeister Schmidt GmbH",
@@ -44,10 +45,11 @@ def _langextract_examples():
                 }
             )]
         ),
-        lx.ExampleData(
+        lx.data.ExampleData(
             text="Lohnsteuerbescheinigung 2024\nArbeitgeber: TechCorp GmbH, München\nArbeitnehmer: Max Mustermann\nSteuer-ID: 12 345 678 901\n3. Bruttoarbeitslohn: 65.000,00 €\n4. Lohnsteuer: 12.450,00 €\n5. Solidaritätszuschlag: 685,00 €\n6. Kirchensteuer: 1.120,00 €\n23a. AN-Anteil Rentenversicherung: 6.045,00 €\n25. AN-Anteil Krankenversicherung: 5.005,00 €\n26. AN-Anteil Pflegeversicherung: 1.105,00 €",
-            extractions=[lx.Extraction(
-                entity="Lohnsteuerbescheinigung",
+            extractions=[lx.data.Extraction(
+                extraction_class="Lohnsteuerbescheinigung",
+                extraction_text="TechCorp GmbH",
                 attributes={
                     "beleg_typ": "lohnsteuerbescheinigung",
                     "aussteller": "TechCorp GmbH",
@@ -61,10 +63,11 @@ def _langextract_examples():
                 }
             )]
         ),
-        lx.ExampleData(
+        lx.data.ExampleData(
             text="Spendenquittung\nCaritas Verband Hamburg e.V.\nSpende von: Maria Muster\nBetrag: 500,00 €\nDatum: 22.11.2024\nArt: Geldzuwendung\nDie Zuwendung wird für steuerbegünstigte Zwecke verwendet.\nWir sind nach §5 Abs. 1 Nr. 9 KStG von der Körperschaftsteuer befreit.",
-            extractions=[lx.Extraction(
-                entity="Spendenbescheinigung",
+            extractions=[lx.data.Extraction(
+                extraction_class="Spendenbescheinigung",
+                extraction_text="Caritas Verband Hamburg e.V.",
                 attributes={
                     "beleg_typ": "spendenbescheinigung",
                     "aussteller": "Caritas Verband Hamburg e.V.",
@@ -76,10 +79,11 @@ def _langextract_examples():
                 }
             )]
         ),
-        lx.ExampleData(
+        lx.data.ExampleData(
             text="Nebenkostenabrechnung 2024\nHausverwaltung Meyer GmbH\nMieter: Familie Mustermann, Musterweg 5, 20357 Hamburg\nAbrechnungszeitraum: 01.01.2024 - 31.12.2024\nHausmeister: 420,00 €\nSchornsteinfeger: 85,00 €\nGartenpflege: 380,00 €\nTreppenhausreinigung: 520,00 €\nMüllabfuhr: 240,00 €\nGesamt: 1.645,00 €\nVorauszahlung: 1.500,00 €\nNachzahlung: 145,00 €",
-            extractions=[lx.Extraction(
-                entity="Nebenkostenabrechnung",
+            extractions=[lx.data.Extraction(
+                extraction_class="Nebenkostenabrechnung",
+                extraction_text="Hausverwaltung Meyer GmbH",
                 attributes={
                     "beleg_typ": "nebenkostenabrechnung",
                     "aussteller": "Hausverwaltung Meyer GmbH",
@@ -121,7 +125,6 @@ async def extract_with_langextract(ocr_text: str) -> Optional[dict]:
             text_or_documents=ocr_text,
             prompt_description=prompt,
             examples=examples,
-            language_model_type=lx.inference.OllamaLanguageModel,
             model_id=OLLAMA_MODEL,
             model_url=OLLAMA_URL,
             fence_output=False,
