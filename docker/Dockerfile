@@ -16,11 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ /app/backend/
 COPY frontend/ /app/frontend/
 
-# Create data dirs
-RUN mkdir -p /app/data /app/uploads
-
 # Non-root user for security
-RUN useradd -r -s /bin/false steuerpilot \
+RUN useradd -r -u 1000 -s /bin/false steuerpilot \
+    && mkdir -p /app/data /app/uploads \
     && chown -R steuerpilot:steuerpilot /app
 USER steuerpilot
 

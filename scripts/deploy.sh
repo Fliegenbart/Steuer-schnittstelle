@@ -76,8 +76,9 @@ else
     echo "  ✓ .env existiert bereits"
 fi
 
-# Daten-Verzeichnisse
+# Daten-Verzeichnisse (UID 1000 = steuerpilot im Container)
 mkdir -p "$APP_DIR/data" "$APP_DIR/uploads"
+chown -R 1000:1000 "$APP_DIR/data" "$APP_DIR/uploads"
 
 # ── 4. Docker bauen und starten ───────────────
 echo ""
