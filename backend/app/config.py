@@ -3,7 +3,7 @@ import os
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    database_url: str = "sqlite:///./data/steuerpilot.db"
+    database_url: str = "sqlite:///./data/belegsync.db"
     secret_key: str = "change-me-in-production"
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1:8b-instruct-q4_K_M"

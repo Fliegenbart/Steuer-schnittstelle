@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    container_name: steuerpilot
+    container_name: belegsync
     ports:
       - "127.0.0.1:8470:8000"
     volumes:
@@ -11,7 +11,7 @@ services:
       - ./uploads:/app/uploads
     env_file: .env
     environment:
-      - DATABASE_URL=sqlite:///./data/steuerpilot.db
+      - DATABASE_URL=sqlite:///./data/belegsync.db
       - OLLAMA_URL=http://host.docker.internal:11434
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -1,4 +1,4 @@
-# SteuerPilot
+# BelegSync
 
 **KI-gestützte Belegverarbeitung mit Source Grounding für DATEV Unternehmen Online**
 
@@ -10,7 +10,7 @@ Steuerberater verbringen durchschnittlich **2 Stunden pro Mandant** mit der manu
 
 ## Die Lösung
 
-SteuerPilot automatisiert die Belegvorverarbeitung und liefert fertige Buchungsvorschläge direkt an DATEV. Der entscheidende Unterschied: **Source Grounding** – jeder extrahierte Wert wird mit seiner exakten Position im Originaldokument verknüpft. Der Steuerberater sieht auf einen Blick, woher jede Zahl kommt.
+BelegSync automatisiert die Belegvorverarbeitung und liefert fertige Buchungsvorschläge direkt an DATEV. Der entscheidende Unterschied: **Source Grounding** – jeder extrahierte Wert wird mit seiner exakten Position im Originaldokument verknüpft. Der Steuerberater sieht auf einen Blick, woher jede Zahl kommt.
 
 ```
 Mandant scannt Belege
@@ -27,13 +27,13 @@ Mandant scannt Belege
 
 ## USPs
 
-| Feature | SteuerPilot | DATEV Automatisierungsservice |
-|---------|-------------|-------------------------------|
+| Feature | BelegSync | DATEV Automatisierungsservice |
+|---------|-----------|-------------------------------|
 | Source Grounding | ✅ Jeder Wert mit Quellenreferenz | ❌ Blackbox |
 | Belegtypen | Alle (Rechnungen, Lohnsteuer, Spenden, NK, §35a) | Nur Rechnungen |
+| §35a-Aufschlüsselung | ✅ Arbeitskosten vs. Materialkosten | ❌ |
 | KI-Verarbeitung | Lokal (Ollama/Hetzner) – DSGVO | Azure OpenAI |
 | Fehlende Belege | ✅ Proaktive Erkennung | ❌ |
-| §35a-Erkennung | ✅ Automatisch Arbeitskosten | ❌ |
 | SKR03 Auto-Kontierung | ✅ | ✅ (nur Rechnungen) |
 
 ## Tech Stack
@@ -64,12 +64,17 @@ cp .env.example .env
 # Ollama Model laden (einmalig)
 ollama pull llama3.1:8b-instruct-q4_K_M
 
-# SteuerPilot starten
+# BelegSync starten
 docker compose up -d
 ```
 
 ### 4. Öffnen
 http://localhost:8470
+
+### Deploy auf Hetzner GEX44
+```bash
+sudo bash scripts/deploy.sh
+```
 
 ## Workflow
 
@@ -96,11 +101,11 @@ http://localhost:8470
 | POST | `/api/datev/sync` | Belege an DATEV senden |
 | GET | `/api/datev/export/csv/{sj_id}` | DATEV CSV Export |
 
-## Architektur für DATEV-Pitch
+## Architektur
 
 ```
 ┌─────────────────────────────────────────────────┐
-│              SteuerPilot Middleware              │
+│               BelegSync Middleware               │
 │                                                 │
 │  ┌──────────┐  ┌────────────┐  ┌────────────┐  │
 │  │ Tesseract│→ │ LangExtract│→ │ Auto-      │  │

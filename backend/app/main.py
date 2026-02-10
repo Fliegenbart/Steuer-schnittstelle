@@ -1,4 +1,4 @@
-"""SteuerPilot – KI-gestützte Belegverarbeitung für Steuerberater.
+"""BelegSync – KI-gestützte Belegverarbeitung für Steuerberater.
 
 Middleware-Lösung: Dokumente → OCR → LangExtract (Source Grounding) → DATEV Unternehmen Online
 """
@@ -18,7 +18,7 @@ from backend.app.routers import mandanten, steuerjahre, belege, datev_sync
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
-    title="SteuerPilot",
+    title="BelegSync",
     description="KI-gestützte Belegverarbeitung mit Source Grounding für DATEV",
     version="1.0.0",
 )
@@ -37,7 +37,7 @@ if FRONTEND.exists():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "steuerpilot", "version": "1.0.0"}
+    return {"status": "ok", "service": "belegsync", "version": "1.0.0"}
 
 
 @app.get("/api/dashboard", response_model=DashboardStats)

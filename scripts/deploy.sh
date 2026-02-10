@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════
-#  SteuerPilot – Deploy auf Hetzner GEX44
+#  BelegSync – Deploy auf Hetzner GEX44
 #  Voraussetzung: Ollama läuft bereits auf dem Host
+#  Nutzung: sudo bash deploy.sh
 # ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
-DOMAIN="${1:-steuerpilot.deine-domain.de}"
-APP_DIR="/opt/steuerpilot"
+APP_DIR="/opt/belegsync"
 REPO="https://github.com/Fliegenbart/Steuer-schnittstelle.git"
+NGINX_PORT=8480
 
 echo "═══════════════════════════════════════════"
-echo "  SteuerPilot Deploy"
-echo "  Domain: $DOMAIN"
+echo "  BelegSync Deploy"
+echo "  Erreichbar auf Port $NGINX_PORT"
 echo "═══════════════════════════════════════════"
 
 # ── 1. Prüfe Voraussetzungen ──────────────────
 echo ""
-echo "[1/7] Prüfe Voraussetzungen..."
+echo "[1/5] Prüfe Voraussetzungen..."
 
 if ! command -v docker &>/dev/null; then
     echo "  ✗ Docker nicht installiert"
@@ -46,9 +47,17 @@ if ! curl -sf http://localhost:11434/api/tags | grep -q "llama3.1"; then
 fi
 echo "  ✓ Llama 3.1 8B Modell verfügbar"
 
+# Prüfe ob Ports schon belegt sind
+if ss -tlnp | grep -q ":8470 " 2>/dev/null; then
+    echo "  ⚠ Port 8470 belegt (alter Container?) → docker stop belegsync"
+fi
+if ss -tlnp | grep -q ":$NGINX_PORT " 2>/dev/null; then
+    echo "  ⚠ Port $NGINX_PORT belegt → ss -tlnp | grep $NGINX_PORT"
+fi
+
 # ── 2. Repo klonen/aktualisieren ──────────────
 echo ""
-echo "[2/7] Lade Code..."
+echo "[2/5] Lade Code..."
 
 if [ -d "$APP_DIR" ]; then
     cd "$APP_DIR"
@@ -62,14 +71,14 @@ fi
 
 # ── 3. .env erstellen ─────────────────────────
 echo ""
-echo "[3/7] Konfiguration..."
+echo "[3/5] Konfiguration..."
 
 if [ ! -f "$APP_DIR/.env" ]; then
     SECRET=$(openssl rand -hex 32)
     cp "$APP_DIR/.env.example" "$APP_DIR/.env"
     sed -i "s|change-me-in-production|$SECRET|" "$APP_DIR/.env"
     echo "  ✓ .env erstellt (SECRET_KEY generiert)"
-    echo "  ⚠ MAESN_API_KEY manuell in $APP_DIR/.env eintragen!"
+    echo "  ⚠ Optional: MAESN_API_KEY in $APP_DIR/.env eintragen"
 else
     echo "  ✓ .env existiert bereits"
 fi
@@ -79,17 +88,17 @@ mkdir -p "$APP_DIR/data" "$APP_DIR/uploads"
 
 # ── 4. Docker bauen und starten ───────────────
 echo ""
-echo "[4/7] Docker Build & Start..."
+echo "[4/5] Docker Build & Start..."
 
 cd "$APP_DIR"
-docker compose build --no-cache
+docker compose build
 docker compose up -d
 
 # Warte auf Health Check
 echo "  Warte auf Startup..."
 for i in $(seq 1 30); do
     if curl -sf http://127.0.0.1:8470/api/health &>/dev/null; then
-        echo "  ✓ SteuerPilot läuft auf Port 8470"
+        echo "  ✓ BelegSync Container läuft"
         break
     fi
     if [ "$i" -eq 30 ]; then
@@ -101,69 +110,32 @@ done
 
 # ── 5. Nginx konfigurieren ────────────────────
 echo ""
-echo "[5/7] Nginx..."
+echo "[5/5] Nginx..."
 
-# Domain in Konfig einsetzen
-NGINX_CONF="/etc/nginx/sites-available/steuerpilot"
-cp "$APP_DIR/scripts/nginx-steuerpilot.conf" "$NGINX_CONF"
-sed -i "s|steuerpilot.deine-domain.de|$DOMAIN|g" "$NGINX_CONF"
+NGINX_CONF="/etc/nginx/sites-available/belegsync"
+cp "$APP_DIR/scripts/nginx-belegsync.conf" "$NGINX_CONF"
 
 # Symlink in sites-enabled
-if [ ! -L /etc/nginx/sites-enabled/steuerpilot ]; then
-    ln -s "$NGINX_CONF" /etc/nginx/sites-enabled/steuerpilot
-fi
-
-# ── 6. SSL-Zertifikat ─────────────────────────
-echo ""
-echo "[6/7] SSL-Zertifikat..."
-
-if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
-    # Temporär ohne SSL starten (damit certbot funktioniert)
-    # Nginx-Konfig auf HTTP-only umstellen
-    cat > "$NGINX_CONF" <<TMPEOF
-server {
-    listen 80;
-    server_name $DOMAIN;
-    location / {
-        proxy_pass http://127.0.0.1:8470;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 120s;
-        client_max_body_size 50M;
-    }
-}
-TMPEOF
-    nginx -t && systemctl reload nginx
-
-    # Certbot
-    if ! command -v certbot &>/dev/null; then
-        apt install -y certbot python3-certbot-nginx
-    fi
-    certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email admin@$DOMAIN
-
-    # Vollständige Konfig wiederherstellen
-    cp "$APP_DIR/scripts/nginx-steuerpilot.conf" "$NGINX_CONF"
-    sed -i "s|steuerpilot.deine-domain.de|$DOMAIN|g" "$NGINX_CONF"
-    echo "  ✓ SSL-Zertifikat erstellt"
-else
-    echo "  ✓ SSL-Zertifikat existiert bereits"
+if [ ! -L /etc/nginx/sites-enabled/belegsync ]; then
+    ln -s "$NGINX_CONF" /etc/nginx/sites-enabled/belegsync
 fi
 
 nginx -t && systemctl reload nginx
-echo "  ✓ Nginx konfiguriert"
+echo "  ✓ Nginx konfiguriert (Port $NGINX_PORT)"
 
-# ── 7. Fertig ─────────────────────────────────
+# ── Fertig ────────────────────────────────────
+SERVER_IP=$(curl -sf https://ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
+
 echo ""
 echo "═══════════════════════════════════════════"
-echo "  ✓ SteuerPilot ist live!"
+echo "  ✓ BelegSync ist live!"
 echo ""
-echo "  URL:    https://$DOMAIN"
-echo "  Health: https://$DOMAIN/api/health"
+echo "  URL:    http://$SERVER_IP:$NGINX_PORT"
+echo "  Health: http://$SERVER_IP:$NGINX_PORT/api/health"
 echo "  Logs:   cd $APP_DIR && docker compose logs -f"
 echo ""
-echo "  Nächste Schritte:"
-echo "  1. MAESN_API_KEY in $APP_DIR/.env eintragen"
-echo "  2. docker compose restart"
+echo "  Später Domain + SSL hinzufügen:"
+echo "  1. DNS A-Record auf $SERVER_IP"
+echo "  2. server_name in nginx-belegsync.conf setzen"
+echo "  3. certbot --nginx -d belegsync.deine-domain.de"
 echo "═══════════════════════════════════════════"
