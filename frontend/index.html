@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SteuerPilot – KI-Belegverarbeitung</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0B0E11;
+  --bg-card: #141922;
+  --bg-card-hover: #1A2130;
+  --bg-input: #0F1318;
+  --border: #1E2736;
+  --border-focus: #3B82F6;
+  --text: #E8ECF1;
+  --text-dim: #7A8699;
+  --text-muted: #4A5568;
+  --accent: #3B82F6;
+  --accent-glow: rgba(59, 130, 246, 0.15);
+  --success: #10B981;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  --purple: #8B5CF6;
+  --datev-green: #3CAA5F;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 2px 12px rgba(0,0,0,0.4);
+  --font: 'DM Sans', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+  --transition: 180ms ease;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html { font-size: 15px; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Layout ─────────────────────────── */
+.app { display: flex; min-height: 100vh; }
+.sidebar {
+  width: 260px;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 100;
+}
+.main { flex:1; margin-left: 260px; }
+.topbar {
+  height: 60px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  background: var(--bg-card);
+  position: sticky;
+  top: 0; z-index: 50;
+  backdrop-filter: blur(16px);
+}
+.content { padding: 28px; max-width: 1400px; }
+
+/* ── Sidebar ────────────────────────── */
+.logo {
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.logo h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.logo h1 .icon { font-size: 1.4rem; }
+.logo .sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.nav { flex:1; padding: 12px 10px; overflow-y: auto; }
+.nav-section {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  padding: 16px 12px 6px;
+  font-weight: 600;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: all var(--transition);
+  margin: 1px 0;
+}
+.nav-item:hover { background: var(--bg-card-hover); color: var(--text); }
+.nav-item.active { background: var(--accent-glow); color: var(--accent); }
+.nav-item .badge {
+  margin-left: auto;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.68rem;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-weight: 600;
+}
+.datev-status {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+}
+.datev-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.datev-dot.connected { background: var(--datev-green); box-shadow: 0 0 6px var(--datev-green); }
+.datev-dot.disconnected { background: var(--text-muted); }
+
+/* ── Cards & Stats ──────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  transition: all var(--transition);
+}
+.stat-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.stat-label {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 600;
+}
+.stat-value {
+  font-size: 1.7rem;
+  font-weight: 700;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.stat-sub { font-size: 0.78rem; color: var(--text-dim); margin-top: 2px; }
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+}
+.card-body { padding: 20px; }
+
+/* ── Buttons ────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font);
+  font-size: 0.84rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-primary:hover { background: #2563EB; box-shadow: 0 0 20px var(--accent-glow); }
+.btn-success { background: var(--datev-green); color: #fff; }
+.btn-success:hover { background: #2F9651; }
+.btn-ghost {
+  background: transparent;
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+.btn-ghost:hover { color: var(--text); border-color: var(--text-dim); }
+.btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+.btn-sm { padding: 5px 10px; font-size: 0.76rem; }
+
+/* ── Forms ──────────────────────────── */
+.form-group { margin-bottom: 14px; }
+.form-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.form-input, .form-select {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.88rem;
+  transition: border-color var(--transition);
+}
+.form-input:focus, .form-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* ── Table ──────────────────────────── */
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+tr:hover td { background: var(--bg-card-hover); }
+tr { cursor: pointer; }
+
+/* ── Status Badges ──────────────────── */
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.badge-status::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+}
+.badge-hochgeladen { background: rgba(107,114,128,0.15); color: #9CA3AF; }
+.badge-hochgeladen::before { background: #9CA3AF; }
+.badge-ocr_laeuft, .badge-extraktion_laeuft { background: rgba(59,130,246,0.12); color: var(--accent); }
+.badge-ocr_laeuft::before, .badge-extraktion_laeuft::before { background: var(--accent); animation: pulse 1.5s infinite; }
+.badge-extrahiert { background: rgba(245,158,11,0.12); color: var(--warning); }
+.badge-extrahiert::before { background: var(--warning); }
+.badge-geprueft { background: rgba(16,185,129,0.12); color: var(--success); }
+.badge-geprueft::before { background: var(--success); }
+.badge-an_datev { background: rgba(60,170,95,0.12); color: var(--datev-green); }
+.badge-an_datev::before { background: var(--datev-green); }
+.badge-fehler { background: rgba(239,68,68,0.12); color: var(--danger); }
+.badge-fehler::before { background: var(--danger); }
+
+.konfidenz-hoch { color: var(--success); }
+.konfidenz-mittel { color: var(--warning); }
+.konfidenz-niedrig { color: var(--danger); }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── Upload Drop Zone ───────────────── */
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  background: var(--bg-input);
+}
+.dropzone:hover, .dropzone.dragover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+.dropzone .icon { font-size: 2.4rem; margin-bottom: 8px; }
+.dropzone p { color: var(--text-dim); font-size: 0.88rem; }
+
+/* ── Source Grounding View ──────────── */
+.source-view {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 16px;
+}
+.ocr-panel {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  max-height: 500px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ocr-highlight {
+  background: rgba(59,130,246,0.2);
+  border-bottom: 2px solid var(--accent);
+  padding: 1px 3px;
+  border-radius: 2px;
+  cursor: help;
+  position: relative;
+}
+.ocr-highlight[data-feld="betrag_brutto"],
+.ocr-highlight[data-feld="betrag_netto"] {
+  background: rgba(16,185,129,0.2);
+  border-color: var(--success);
+}
+.ocr-highlight[data-feld="datum_beleg"] {
+  background: rgba(139,92,246,0.2);
+  border-color: var(--purple);
+}
+.ocr-highlight[data-feld="aussteller"] {
+  background: rgba(245,158,11,0.2);
+  border-color: var(--warning);
+}
+.extraction-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.ext-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ext-field:last-child { border-bottom: none; }
+.ext-label {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ext-value {
+  font-weight: 600;
+  font-family: var(--mono);
+  font-size: 0.88rem;
+}
+.ext-grounded {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  margin-left: 6px;
+  title: "Quellenreferenz vorhanden";
+}
+
+/* ── Missing Docs ───────────────────── */
+.missing-item {
+  padding: 8px 12px;
+  font-size: 0.84rem;
+  border-left: 3px solid;
+  margin: 4px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--bg-input);
+}
+
+/* ── Modal ──────────────────────────── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 90%;
+  max-width: 900px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+}
+.modal-header {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 1.05rem;
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+  z-index: 10;
+}
+.modal-body { padding: 22px; }
+.modal-footer {
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-card);
+}
+.close-btn {
+  background: none; border: none; color: var(--text-dim);
+  font-size: 1.2rem; cursor: pointer;
+}
+.close-btn:hover { color: var(--text); }
+
+/* ── Progress Bar ───────────────────── */
+.progress-bar {
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent), var(--purple));
+  transition: width 0.5s ease;
+}
+
+/* ── Animations ─────────────────────── */
+@keyframes fadeIn {
+  from { opacity:0; transform: translateY(8px); }
+  to { opacity:1; transform: translateY(0); }
+}
+.animate-in { animation: fadeIn 0.3s ease forwards; }
+.view { display: none; }
+.view.active { display: block; }
+
+/* ── Responsive ─────────────────────── */
+@media (max-width: 900px) {
+  .sidebar { display: none; }
+  .main { margin-left: 0; }
+  .source-view { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <h1><span class="icon">◈</span> SteuerPilot</h1>
+      <div class="sub">KI-Belegverarbeitung</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Übersicht</div>
+      <div class="nav-item active" data-view="dashboard" onclick="showView('dashboard')">
+        📊 Dashboard
+      </div>
+
+      <div class="nav-section">Verwaltung</div>
+      <div class="nav-item" data-view="mandanten" onclick="showView('mandanten')">
+        👥 Mandanten
+      </div>
+
+      <div class="nav-section">Verarbeitung</div>
+      <div class="nav-item" data-view="belege" onclick="showView('belege')">
+        📄 Belege <span class="badge" id="belege-badge">0</span>
+      </div>
+
+      <div class="nav-section">DATEV</div>
+      <div class="nav-item" data-view="datev" onclick="showView('datev')">
+        🔗 DATEV Sync
+      </div>
+    </nav>
+
+    <div class="datev-status" id="datev-status-bar">
+      <span class="datev-dot disconnected" id="datev-dot"></span>
+      <span id="datev-label">DATEV nicht verbunden</span>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <header class="topbar">
+      <div id="topbar-title" style="font-weight:600;">Dashboard</div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <select class="form-select" id="mandant-select" style="width:220px;" onchange="onMandantChange()">
+          <option value="">Mandant wählen...</option>
+        </select>
+        <select class="form-select" id="sj-select" style="width:130px;" onchange="onSteuerjahrChange()">
+          <option value="">Jahr...</option>
+        </select>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- ═══ Dashboard View ═══ -->
+      <div class="view active" id="view-dashboard">
+        <div class="stats-grid" id="stats-grid"></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="card">
+            <div class="card-header">📋 Letzte Belege</div>
+            <div class="card-body" id="recent-belege">
+              <p style="color:var(--text-dim);">Mandant und Steuerjahr wählen</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">⚠️ Fehlende Unterlagen</div>
+            <div class="card-body" id="missing-docs">
+              <p style="color:var(--text-dim);">Wird nach Beleganalyse angezeigt</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Mandanten View ═══ -->
+      <div class="view" id="view-mandanten">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <h2 style="font-size:1.2rem;font-weight:700;">Mandanten</h2>
+          <button class="btn btn-primary" onclick="showNewMandant()">+ Neuer Mandant</button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Name</th><th>Firma</th><th>Steuernummer</th><th>DATEV Nr.</th><th>Steuerjahre</th><th></th></tr>
+              </thead>
+              <tbody id="mandanten-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Belege View ═══ -->
+      <div class="view" id="view-belege">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <h2 style="font-size:1.2rem;font-weight:700;">
+            Belege <span id="belege-count" style="color:var(--text-dim);font-weight:400;"></span>
+          </h2>
+          <div style="display:flex;gap:10px;">
+            <button class="btn btn-ghost" onclick="refreshBelege()">↻ Aktualisieren</button>
+          </div>
+        </div>
+
+        <!-- Upload Zone -->
+        <div class="dropzone" id="dropzone"
+             ondragover="event.preventDefault();this.classList.add('dragover')"
+             ondragleave="this.classList.remove('dragover')"
+             ondrop="handleDrop(event)"
+             onclick="document.getElementById('file-input').click()">
+          <div class="icon">📎</div>
+          <p><strong>Belege hochladen</strong> – Dateien hierher ziehen oder klicken</p>
+          <p style="font-size:0.76rem;margin-top:4px;">PDF, JPG, PNG • Max 50 MB</p>
+          <input type="file" id="file-input" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.bmp" style="display:none" onchange="handleFiles(this.files)">
+        </div>
+
+        <div id="upload-progress" style="display:none;margin:16px 0;">
+          <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+            <span id="upload-text">Wird hochgeladen...</span>
+            <span id="upload-pct">0%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="upload-bar" style="width:0%"></div></div>
+        </div>
+
+        <!-- Belege Table -->
+        <div class="card" style="margin-top:16px;">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Datei</th><th>Typ</th><th>Aussteller</th><th>Betrag</th><th>Konto</th><th>Status</th><th>Konfidenz</th><th>DATEV</th></tr>
+              </thead>
+              <tbody id="belege-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ DATEV View ═══ -->
+      <div class="view" id="view-datev">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <h2 style="font-size:1.2rem;font-weight:700;">DATEV Integration</h2>
+          <div style="display:flex;gap:10px;">
+            <button class="btn btn-success" onclick="syncToDATEV(false)">🔄 Geprüfte an DATEV senden</button>
+            <button class="btn btn-ghost" onclick="exportCSV()">⬇ CSV Export</button>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Verbindung</div>
+            <div id="datev-connection" style="margin-top:8px;">Wird geprüft...</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Bereit zum Sync</div>
+            <div class="stat-value" id="datev-ready">–</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Gesynced</div>
+            <div class="stat-value" id="datev-synced" style="color:var(--datev-green);">–</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Fehler</div>
+            <div class="stat-value" id="datev-errors" style="color:var(--danger);">–</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">Sync-Protokoll</div>
+          <div class="card-body" id="sync-log">
+            <p style="color:var(--text-dim);">Noch keine Sync-Aktivität</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Beleg Detail Modal ═══ -->
+<div class="modal-overlay" id="beleg-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="modal-title">Beleg Details</span>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<!-- ═══ New Mandant Modal ═══ -->
+<div class="modal-overlay" id="mandant-modal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <span>Neuer Mandant</span>
+      <button class="close-btn" onclick="document.getElementById('mandant-modal').classList.remove('show')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="m-name"></div>
+      <div class="form-group"><label class="form-label">Firma</label><input class="form-input" id="m-firma"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group"><label class="form-label">Steuernummer</label><input class="form-input" id="m-stnr"></div>
+        <div class="form-group"><label class="form-label">Steuer-ID</label><input class="form-input" id="m-stid"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group"><label class="form-label">DATEV Berater-Nr.</label><input class="form-input" id="m-bnr"></div>
+        <div class="form-group"><label class="form-label">DATEV Mandant-Nr.</label><input class="form-input" id="m-mnr"></div>
+      </div>
+      <div class="form-group"><label class="form-label">E-Mail</label><input class="form-input" id="m-email" type="email"></div>
+      <div class="form-group"><label class="form-label">Steuerjahr anlegen</label><input class="form-input" id="m-jahr" type="number" value="2024" min="2018" max="2026"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('mandant-modal').classList.remove('show')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="saveMandant()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let state = {
+  mandanten: [],
+  mandantId: null,
+  steuerjahrId: null,
+  belege: [],
+};
+
+// ── API Helpers ──────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    ...opts,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || res.statusText);
+  }
+  return res.json();
+}
+
+function fmt(n) {
+  if (n == null) return '–';
+  return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+}
+
+function statusLabel(s) {
+  const map = {
+    hochgeladen: 'Hochgeladen', ocr_laeuft: 'OCR läuft', ocr_fertig: 'OCR fertig',
+    extraktion_laeuft: 'Extraktion...', extrahiert: 'Extrahiert',
+    geprueft: 'Geprüft ✓', an_datev: 'An DATEV', fehler: 'Fehler',
+  };
+  return `<span class="badge-status badge-${s}">${map[s] || s}</span>`;
+}
+
+// ── Navigation ───────────────────────
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
+  const titles = { dashboard: 'Dashboard', mandanten: 'Mandanten', belege: 'Belege', datev: 'DATEV Integration' };
+  document.getElementById('topbar-title').textContent = titles[name] || name;
+
+  if (name === 'datev') loadDATEVStatus();
+}
+
+// ── Init ─────────────────────────────
+async function init() {
+  await loadMandanten();
+  loadDashboard();
+  checkDATEV();
+}
+
+// ── Mandanten ────────────────────────
+async function loadMandanten() {
+  state.mandanten = await api('/api/mandanten');
+  const sel = document.getElementById('mandant-select');
+  sel.innerHTML = '<option value="">Mandant wählen...</option>' +
+    state.mandanten.map(m => `<option value="${m.id}">${m.name}${m.firma ? ' – ' + m.firma : ''}</option>`).join('');
+
+  renderMandantenTable();
+  if (state.mandantId) sel.value = state.mandantId;
+}
+
+function renderMandantenTable() {
+  document.getElementById('mandanten-table').innerHTML = state.mandanten.map(m => `
+    <tr onclick="selectMandant(${m.id})">
+      <td><strong>${m.name}</strong></td>
+      <td>${m.firma || '–'}</td>
+      <td style="font-family:var(--mono);font-size:0.82rem;">${m.steuernummer || '–'}</td>
+      <td style="font-family:var(--mono);font-size:0.82rem;">${m.datev_berater_nr || '–'}/${m.datev_mandant_nr || '–'}</td>
+      <td>${m.anzahl_steuerjahre}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deleteMandant(${m.id})">🗑</button></td>
+    </tr>
+  `).join('');
+}
+
+async function selectMandant(id) {
+  state.mandantId = id;
+  document.getElementById('mandant-select').value = id;
+  await loadSteuerjahre();
+}
+
+async function onMandantChange() {
+  const id = document.getElementById('mandant-select').value;
+  if (!id) return;
+  await selectMandant(parseInt(id));
+}
+
+function showNewMandant() {
+  ['m-name','m-firma','m-stnr','m-stid','m-bnr','m-mnr','m-email'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('m-jahr').value = '2024';
+  document.getElementById('mandant-modal').classList.add('show');
+}
+
+async function saveMandant() {
+  const name = document.getElementById('m-name').value.trim();
+  if (!name) return alert('Name erforderlich');
+  const m = await api('/api/mandanten', {
+    method: 'POST',
+    body: JSON.stringify({
+      name,
+      firma: document.getElementById('m-firma').value || null,
+      steuernummer: document.getElementById('m-stnr').value || null,
+      steuer_id: document.getElementById('m-stid').value || null,
+      datev_berater_nr: document.getElementById('m-bnr').value || null,
+      datev_mandant_nr: document.getElementById('m-mnr').value || null,
+      email: document.getElementById('m-email').value || null,
+    }),
+  });
+
+  const jahr = parseInt(document.getElementById('m-jahr').value);
+  if (jahr) {
+    await api('/api/steuerjahre', {
+      method: 'POST',
+      body: JSON.stringify({ mandant_id: m.id, jahr }),
+    });
+  }
+
+  document.getElementById('mandant-modal').classList.remove('show');
+  await loadMandanten();
+  await selectMandant(m.id);
+}
+
+async function deleteMandant(id) {
+  if (!confirm('Mandant und alle Daten löschen?')) return;
+  await api(`/api/mandanten/${id}`, { method: 'DELETE' });
+  await loadMandanten();
+}
+
+// ── Steuerjahre ──────────────────────
+async function loadSteuerjahre() {
+  if (!state.mandantId) return;
+  const sjs = await api(`/api/steuerjahre/mandant/${state.mandantId}`);
+  const sel = document.getElementById('sj-select');
+  sel.innerHTML = '<option value="">Jahr...</option>' +
+    sjs.map(s => `<option value="${s.id}">${s.jahr} (${s.anzahl_belege} Belege)</option>`).join('');
+
+  if (sjs.length > 0) {
+    state.steuerjahrId = sjs[0].id;
+    sel.value = sjs[0].id;
+    await loadBelege();
+    renderMissing(sjs[0].vollstaendigkeit);
+  }
+}
+
+async function onSteuerjahrChange() {
+  state.steuerjahrId = parseInt(document.getElementById('sj-select').value);
+  if (state.steuerjahrId) await loadBelege();
+}
+
+// ── Dashboard ────────────────────────
+async function loadDashboard() {
+  try {
+    const d = await api('/api/dashboard');
+    document.getElementById('stats-grid').innerHTML = `
+      <div class="stat-card animate-in"><div class="stat-label">Mandanten</div><div class="stat-value">${d.mandanten_aktiv}</div></div>
+      <div class="stat-card animate-in" style="animation-delay:50ms"><div class="stat-label">Belege gesamt</div><div class="stat-value">${d.belege_gesamt}</div></div>
+      <div class="stat-card animate-in" style="animation-delay:100ms"><div class="stat-label">Offen</div><div class="stat-value" style="color:var(--warning)">${d.belege_offen}</div></div>
+      <div class="stat-card animate-in" style="animation-delay:150ms"><div class="stat-label">Geprüft</div><div class="stat-value" style="color:var(--success)">${d.belege_geprueft}</div></div>
+      <div class="stat-card animate-in" style="animation-delay:200ms"><div class="stat-label">An DATEV</div><div class="stat-value" style="color:var(--datev-green)">${d.belege_synced}</div></div>
+      <div class="stat-card animate-in" style="animation-delay:250ms"><div class="stat-label">Extraktionsrate</div><div class="stat-value">${d.extraktion_rate}%</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${d.extraktion_rate}%"></div></div>
+      </div>
+      <div class="stat-card animate-in" style="animation-delay:300ms"><div class="stat-label">Summe Brutto</div><div class="stat-value">${fmt(d.summe_brutto)} €</div></div>
+    `;
+    document.getElementById('belege-badge').textContent = d.belege_offen;
+  } catch(e) { console.error(e); }
+}
+
+// ── Belege ───────────────────────────
+async function loadBelege() {
+  if (!state.steuerjahrId) return;
+  state.belege = await api(`/api/belege/steuerjahr/${state.steuerjahrId}`);
+  renderBelege();
+  renderRecentBelege();
+  loadDashboard();
+}
+
+function refreshBelege() { loadBelege(); }
+
+function renderBelege() {
+  const count = document.getElementById('belege-count');
+  count.textContent = `(${state.belege.length})`;
+  document.getElementById('belege-table').innerHTML = state.belege.map(b => `
+    <tr onclick="openBeleg(${b.id})">
+      <td title="${b.dateiname}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.dateiname}</td>
+      <td>${b.beleg_typ || '–'}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.aussteller || '–'}</td>
+      <td style="font-family:var(--mono);text-align:right;">${b.betrag_brutto != null ? fmt(b.betrag_brutto) + ' €' : '–'}</td>
+      <td style="font-family:var(--mono);">${b.skr03_konto || '–'}</td>
+      <td>${statusLabel(b.status)}</td>
+      <td><span class="konfidenz-${b.extraktion_konfidenz || 'niedrig'}">${b.extraktion_konfidenz || '–'}</span></td>
+      <td>${b.datev_sync_status === 'synced' ? '<span style="color:var(--datev-green)">✓</span>' : (b.datev_sync_status === 'error' ? '<span style="color:var(--danger)">✗</span>' : '–')}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:30px;">Keine Belege vorhanden</td></tr>';
+}
+
+function renderRecentBelege() {
+  const recent = state.belege.slice(0, 5);
+  document.getElementById('recent-belege').innerHTML = recent.map(b => `
+    <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:0.84rem;cursor:pointer;" onclick="openBeleg(${b.id})">
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">${b.dateiname}</span>
+      <span>${statusLabel(b.status)}</span>
+    </div>
+  `).join('') || '<p style="color:var(--text-dim);">Keine Belege</p>';
+}
+
+function renderMissing(v) {
+  if (!v || !v.empfehlungen || v.empfehlungen.length === 0) {
+    document.getElementById('missing-docs').innerHTML = '<p style="color:var(--success);">✓ Alle erwarteten Belege vorhanden</p>';
+    return;
+  }
+  document.getElementById('missing-docs').innerHTML = v.empfehlungen.map(e => {
+    const color = e.startsWith('🔴') ? 'var(--danger)' : (e.startsWith('🟡') ? 'var(--warning)' : 'var(--accent)');
+    return `<div class="missing-item" style="border-left-color:${color};">${e}</div>`;
+  }).join('');
+}
+
+// ── Upload ───────────────────────────
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+}
+
+async function handleFiles(files) {
+  if (!state.steuerjahrId) return alert('Bitte Mandant und Steuerjahr wählen');
+  if (!files.length) return;
+
+  const prog = document.getElementById('upload-progress');
+  const bar = document.getElementById('upload-bar');
+  const text = document.getElementById('upload-text');
+  const pct = document.getElementById('upload-pct');
+  prog.style.display = 'block';
+
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+
+  text.textContent = `${files.length} Datei(en) werden hochgeladen...`;
+  bar.style.width = '30%';
+  pct.textContent = '30%';
+
+  try {
+    const res = await fetch(`/api/belege/upload/${state.steuerjahrId}`, { method: 'POST', body: fd });
+    bar.style.width = '70%';
+    pct.textContent = '70%';
+
+    if (!res.ok) throw new Error((await res.json()).detail || 'Upload fehlgeschlagen');
+
+    const uploaded = await res.json();
+    bar.style.width = '100%';
+    pct.textContent = '100%';
+    text.textContent = `✓ ${uploaded.length} Beleg(e) hochgeladen – Verarbeitung läuft...`;
+
+    // Poll for completion
+    setTimeout(async () => {
+      await loadBelege();
+      prog.style.display = 'none';
+    }, 2000);
+
+    // Auto-refresh while processing
+    let polls = 0;
+    const interval = setInterval(async () => {
+      await loadBelege();
+      polls++;
+      const processing = state.belege.filter(b => ['hochgeladen','ocr_laeuft','ocr_fertig','extraktion_laeuft'].includes(b.status));
+      if (processing.length === 0 || polls > 30) {
+        clearInterval(interval);
+        prog.style.display = 'none';
+      }
+    }, 3000);
+
+  } catch(e) {
+    text.textContent = '✗ ' + e.message;
+    bar.style.width = '100%';
+    bar.style.background = 'var(--danger)';
+    setTimeout(() => { prog.style.display = 'none'; bar.style.background = ''; }, 4000);
+  }
+}
+
+// ── Beleg Detail Modal ───────────────
+async function openBeleg(id) {
+  const b = await api(`/api/belege/${id}`);
+  document.getElementById('modal-title').textContent = b.dateiname;
+
+  // Build source-grounded OCR view
+  let ocrHtml = '<p style="color:var(--text-dim);">Kein OCR-Text</p>';
+  if (b.ocr_text) {
+    ocrHtml = buildSourceGroundedText(b.ocr_text, b.quellreferenzen || []);
+  }
+
+  // Build extraction fields
+  const fields = [
+    ['Belegtyp', b.beleg_typ],
+    ['Aussteller', b.aussteller],
+    ['Beschreibung', b.beschreibung],
+    ['Datum', b.datum_beleg],
+    ['Rechnungsnr.', b.rechnungsnummer],
+    ['Brutto', b.betrag_brutto != null ? fmt(b.betrag_brutto) + ' €' : null],
+    ['Netto', b.betrag_netto != null ? fmt(b.betrag_netto) + ' €' : null],
+    ['MwSt-Satz', b.mwst_satz != null ? b.mwst_satz + '%' : null],
+    ['MwSt-Betrag', b.mwst_betrag != null ? fmt(b.mwst_betrag) + ' €' : null],
+    ['SKR03-Konto', b.skr03_konto ? b.skr03_konto + (b.skr03_bezeichnung ? ' – ' + b.skr03_bezeichnung : '') : null],
+    ['Gegenkonto', b.gegenkonto],
+    ['BU-Schlüssel', b.bu_schluessel],
+    ['Steuer-Kategorie', b.steuer_kategorie],
+    ['§35a-Anteil', b.paragraph_35a_anteil != null ? fmt(b.paragraph_35a_anteil) + ' €' : null],
+  ];
+
+  const groundedFields = new Set((b.quellreferenzen || []).map(s => s.feld).filter(Boolean));
+
+  const fieldsHtml = fields.map(([label, value]) => {
+    if (!value) return '';
+    const grounded = groundedFields.has(label.toLowerCase().replace(/[^a-z]/g, '')) ||
+                     groundedFields.has(label.toLowerCase());
+    return `<div class="ext-field">
+      <span class="ext-label">${label}</span>
+      <span class="ext-value">${value}${grounded ? '<span class="ext-grounded" title="Quellreferenz im Text gefunden"></span>' : ''}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('modal-body').innerHTML = `
+    <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+      ${statusLabel(b.status)}
+      <span style="font-size:0.82rem;color:var(--text-dim);">Methode: <strong>${b.extraktion_methode || '–'}</strong></span>
+      <span style="font-size:0.82rem;">Konfidenz: <strong class="konfidenz-${b.extraktion_konfidenz || 'niedrig'}">${b.extraktion_konfidenz || '–'}</strong></span>
+      <span style="font-size:0.82rem;color:var(--text-dim);">OCR: ${b.ocr_konfidenz ? b.ocr_konfidenz.toFixed(1) + '%' : '–'}</span>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <div style="font-size:0.72rem;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;">
+        <span>🔵 Aussteller</span>
+        <span style="color:var(--success);">🟢 Betrag</span>
+        <span style="color:var(--purple);">🟣 Datum</span>
+        <span style="color:var(--accent);">● Sonstiges</span>
+      </div>
+    </div>
+
+    <div class="source-view">
+      <div>
+        <div style="font-size:0.76rem;font-weight:600;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">OCR-Text mit Quellenreferenzen</div>
+        <div class="ocr-panel">${ocrHtml}</div>
+      </div>
+      <div>
+        <div style="font-size:0.76rem;font-weight:600;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Extrahierte Daten</div>
+        <div class="extraction-panel">${fieldsHtml || '<p style="color:var(--text-dim);">Keine Extraktion</p>'}</div>
+
+        ${b.status === 'extrahiert' || b.status === 'geprueft' ? `
+        <div style="margin-top:16px;">
+          <div class="form-group">
+            <label class="form-label">Prüfnotiz</label>
+            <input class="form-input" id="pruefnotiz" value="${b.pruefnotiz || ''}" placeholder="Optionale Notiz...">
+          </div>
+        </div>` : ''}
+      </div>
+    </div>
+  `;
+
+  // Footer buttons
+  const canApprove = ['extrahiert'].includes(b.status);
+  const canReprocess = ['fehler', 'extrahiert'].includes(b.status);
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-danger btn-sm" onclick="deleteBeleg(${b.id})">Löschen</button>
+    <div style="flex:1"></div>
+    ${canReprocess ? `<button class="btn btn-ghost" onclick="reprocessBeleg(${b.id})">↻ Neu verarbeiten</button>` : ''}
+    ${canApprove ? `<button class="btn btn-success" onclick="approveBeleg(${b.id})">✓ Freigeben</button>` : ''}
+    <button class="btn btn-ghost" onclick="closeModal()">Schließen</button>
+  `;
+
+  document.getElementById('beleg-modal').classList.add('show');
+}
+
+function buildSourceGroundedText(text, spans) {
+  if (!spans || spans.length === 0) return escHtml(text);
+
+  // Sort spans by start position, then merge/handle overlaps
+  const sorted = [...spans].sort((a, b) => a.start - b.start);
+  let result = '';
+  let pos = 0;
+
+  for (const span of sorted) {
+    if (span.start < pos) continue; // skip overlapping
+    if (span.start > pos) {
+      result += escHtml(text.slice(pos, span.start));
+    }
+    const highlighted = text.slice(span.start, span.end);
+    result += `<span class="ocr-highlight" data-feld="${span.feld || ''}" title="${span.feld || 'Extrahiert'}: ${escAttr(highlighted)}">${escHtml(highlighted)}</span>`;
+    pos = span.end;
+  }
+  if (pos < text.length) {
+    result += escHtml(text.slice(pos));
+  }
+  return result;
+}
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return s.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function closeModal() {
+  document.getElementById('beleg-modal').classList.remove('show');
+}
+
+async function approveBeleg(id) {
+  const notiz = document.getElementById('pruefnotiz')?.value || '';
+  await api(`/api/belege/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ manuell_geprueft: true, pruefnotiz: notiz }),
+  });
+  closeModal();
+  await loadBelege();
+}
+
+async function reprocessBeleg(id) {
+  await api(`/api/belege/${id}/reprocess`, { method: 'POST' });
+  closeModal();
+  setTimeout(loadBelege, 2000);
+}
+
+async function deleteBeleg(id) {
+  if (!confirm('Beleg löschen?')) return;
+  await api(`/api/belege/${id}`, { method: 'DELETE' });
+  closeModal();
+  await loadBelege();
+}
+
+// ── DATEV ────────────────────────────
+async function checkDATEV() {
+  try {
+    const status = await api('/api/datev/status');
+    const dot = document.getElementById('datev-dot');
+    const label = document.getElementById('datev-label');
+    if (status.maesn_configured && status.connection?.connected) {
+      dot.className = 'datev-dot connected';
+      label.textContent = 'DATEV verbunden';
+    } else if (status.maesn_configured) {
+      dot.className = 'datev-dot disconnected';
+      label.textContent = 'Maesn konfiguriert';
+    } else {
+      dot.className = 'datev-dot disconnected';
+      label.textContent = 'Nicht verbunden';
+    }
+  } catch(e) { console.error(e); }
+}
+
+async function loadDATEVStatus() {
+  try {
+    const status = await api('/api/datev/status');
+    const conn = document.getElementById('datev-connection');
+    if (status.maesn_configured) {
+      conn.innerHTML = status.connection?.connected
+        ? '<span style="color:var(--datev-green);font-weight:600;">✓ Maesn verbunden</span><br><span style="font-size:0.78rem;color:var(--text-dim);">Sandbox: ' + (status.sandbox ? 'Ja' : 'Nein') + '</span>'
+        : '<span style="color:var(--warning);font-weight:600;">Maesn konfiguriert, Verbindung fehlgeschlagen</span>';
+    } else {
+      conn.innerHTML = '<span style="color:var(--text-dim);">Maesn API Key in .env konfigurieren</span><br><span style="font-size:0.78rem;">→ <a href="https://www.maesn.com" target="_blank" style="color:var(--accent);">maesn.com</a></span>';
+    }
+
+    // Count belege stats
+    const ready = state.belege.filter(b => b.manuell_geprueft && b.datev_sync_status !== 'synced').length;
+    const synced = state.belege.filter(b => b.datev_sync_status === 'synced').length;
+    const errors = state.belege.filter(b => b.datev_sync_status === 'error').length;
+    document.getElementById('datev-ready').textContent = ready;
+    document.getElementById('datev-synced').textContent = synced;
+    document.getElementById('datev-errors').textContent = errors;
+
+  } catch(e) { console.error(e); }
+}
+
+async function syncToDATEV(includeUnreviewed) {
+  if (!state.steuerjahrId) return alert('Steuerjahr wählen');
+  try {
+    const result = await api('/api/datev/sync', {
+      method: 'POST',
+      body: JSON.stringify({
+        steuerjahr_id: state.steuerjahrId,
+        nur_gepruefte: !includeUnreviewed,
+      }),
+    });
+    alert(`DATEV Sync: ${result.success || 0} erfolgreich, ${result.errors || 0} Fehler`);
+    await loadBelege();
+    loadDATEVStatus();
+  } catch(e) { alert('Sync-Fehler: ' + e.message); }
+}
+
+async function exportCSV() {
+  if (!state.steuerjahrId) return alert('Steuerjahr wählen');
+  window.open(`/api/datev/export/csv/${state.steuerjahrId}?nur_gepruefte=false`, '_blank');
+}
+
+// ── Boot ─────────────────────────────
+document.addEventListener('DOMContentLoaded', init);
+
+// Auto-refresh every 10s if processing
+setInterval(() => {
+  if (state.belege.some(b => ['ocr_laeuft','extraktion_laeuft'].includes(b.status))) {
+    loadBelege();
+  }
+}, 10000);
+</script>
+
+</body>
+</html>
