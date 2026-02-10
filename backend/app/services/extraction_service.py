@@ -1,9 +1,7 @@
-"""Extraction Service – LangExtract + Ollama with Source Grounding.
+"""BelegSync – Extraction Service (Ollama-only).
 
-This is SteuerPilot's core differentiator:
-- Every extracted value maps back to its exact position in the OCR text
-- Explainable AI: the Steuerberater can verify each value at a glance
-- This is what DATEV doesn't have and what they need (per their own Explainable AI article)
+Extrahiert steuerlich relevante Daten aus OCR-Text via Llama 3.1 8B.
+Source Grounding: Jeder extrahierte Wert wird auf seine Position im OCR-Text gemappt.
 """
 import os, json, re, logging
 from typing import Optional
@@ -16,213 +14,149 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b-instruct-q4_K_M")
 
 
 # ════════════════════════════════════════════
-#  LangExtract Path (preferred – source grounding)
+#  Ollama Extraction – optimierter Prompt
 # ════════════════════════════════════════════
 
-def _langextract_examples():
-    try:
-        import langextract as lx
-    except ImportError:
-        return None
+SYSTEM_PROMPT = """Du bist ein Experte für deutsche Steuerbelege. Du analysierst OCR-Text und extrahierst steuerlich relevante Daten als JSON.
 
-    return [
-        lx.data.ExampleData(
-            text="Rechnung Nr. 2024-0815\nMalermeister Schmidt GmbH\nHauptstr. 12, 20095 Hamburg\nAnstricharbeiten Wohnzimmer\nArbeitskosten: 1.200,00 €\nMaterial: 340,00 €\nGesamt netto: 1.540,00 €\nMwSt 19%: 292,60 €\nBrutto: 1.832,60 €\nDatum: 15.03.2024",
-            extractions=[lx.data.Extraction(
-                extraction_class="Handwerkerrechnung",
-                extraction_text="Malermeister Schmidt GmbH",
-                attributes={
-                    "beleg_typ": "handwerkerrechnung",
-                    "aussteller": "Malermeister Schmidt GmbH",
-                    "beschreibung": "Anstricharbeiten Wohnzimmer",
-                    "betrag_brutto": "1832.60", "betrag_netto": "1540.00",
-                    "mwst_satz": "19", "mwst_betrag": "292.60",
-                    "datum_beleg": "15.03.2024",
-                    "arbeitskosten_35a": "1200.00",
-                    "materialkosten": "340.00",
-                    "steuer_kategorie": "Handwerkerleistungen §35a",
-                    "skr03_konto": "4946", "rechnungsnummer": "2024-0815"
-                }
-            )]
-        ),
-        lx.data.ExampleData(
-            text="Lohnsteuerbescheinigung 2024\nArbeitgeber: TechCorp GmbH, München\nArbeitnehmer: Max Mustermann\nSteuer-ID: 12 345 678 901\n3. Bruttoarbeitslohn: 65.000,00 €\n4. Lohnsteuer: 12.450,00 €\n5. Solidaritätszuschlag: 685,00 €\n6. Kirchensteuer: 1.120,00 €\n23a. AN-Anteil Rentenversicherung: 6.045,00 €\n25. AN-Anteil Krankenversicherung: 5.005,00 €\n26. AN-Anteil Pflegeversicherung: 1.105,00 €",
-            extractions=[lx.data.Extraction(
-                extraction_class="Lohnsteuerbescheinigung",
-                extraction_text="TechCorp GmbH",
-                attributes={
-                    "beleg_typ": "lohnsteuerbescheinigung",
-                    "aussteller": "TechCorp GmbH",
-                    "beschreibung": "Lohnsteuerbescheinigung 2024 - Max Mustermann",
-                    "betrag_brutto": "65000.00",
-                    "datum_beleg": "2024",
-                    "steuer_kategorie": "Einkünfte nichtselbständige Arbeit",
-                    "lohnsteuer": "12450.00", "soli": "685.00", "kirchensteuer": "1120.00",
-                    "rv_beitrag": "6045.00", "kv_beitrag": "5005.00", "pv_beitrag": "1105.00",
-                    "steuer_id": "12 345 678 901"
-                }
-            )]
-        ),
-        lx.data.ExampleData(
-            text="Spendenquittung\nCaritas Verband Hamburg e.V.\nSpende von: Maria Muster\nBetrag: 500,00 €\nDatum: 22.11.2024\nArt: Geldzuwendung\nDie Zuwendung wird für steuerbegünstigte Zwecke verwendet.\nWir sind nach §5 Abs. 1 Nr. 9 KStG von der Körperschaftsteuer befreit.",
-            extractions=[lx.data.Extraction(
-                extraction_class="Spendenbescheinigung",
-                extraction_text="Caritas Verband Hamburg e.V.",
-                attributes={
-                    "beleg_typ": "spendenbescheinigung",
-                    "aussteller": "Caritas Verband Hamburg e.V.",
-                    "beschreibung": "Geldzuwendung an Caritas Verband Hamburg",
-                    "betrag_brutto": "500.00",
-                    "datum_beleg": "22.11.2024",
-                    "steuer_kategorie": "Spenden und Mitgliedsbeiträge",
-                    "skr03_konto": "6300"
-                }
-            )]
-        ),
-        lx.data.ExampleData(
-            text="Nebenkostenabrechnung 2024\nHausverwaltung Meyer GmbH\nMieter: Familie Mustermann, Musterweg 5, 20357 Hamburg\nAbrechnungszeitraum: 01.01.2024 - 31.12.2024\nHausmeister: 420,00 €\nSchornsteinfeger: 85,00 €\nGartenpflege: 380,00 €\nTreppenhausreinigung: 520,00 €\nMüllabfuhr: 240,00 €\nGesamt: 1.645,00 €\nVorauszahlung: 1.500,00 €\nNachzahlung: 145,00 €",
-            extractions=[lx.data.Extraction(
-                extraction_class="Nebenkostenabrechnung",
-                extraction_text="Hausverwaltung Meyer GmbH",
-                attributes={
-                    "beleg_typ": "nebenkostenabrechnung",
-                    "aussteller": "Hausverwaltung Meyer GmbH",
-                    "beschreibung": "Nebenkostenabrechnung 2024 - Musterweg 5",
-                    "betrag_brutto": "1645.00",
-                    "datum_beleg": "2024",
-                    "steuer_kategorie": "Haushaltsnahe Dienstleistungen §35a",
-                    "arbeitskosten_35a": "1320.00",
-                    "materialkosten": "325.00",
-                    "nachzahlung": "145.00"
-                }
-            )]
-        ),
-    ]
+REGELN:
+- Antworte NUR mit einem JSON-Objekt, kein anderer Text
+- Deutsche Zahlen (1.234,56) als Dezimalzahl im JSON: 1234.56
+- Unbekannte Felder: null (nicht "null", nicht "", nicht 0)
+- Datum im Format TT.MM.JJJJ
+- Bei Handwerkerrechnungen/Nebenkostenabrechnungen: trenne Arbeitskosten (§35a absetzbar) von Materialkosten (nicht absetzbar)
 
+FELDER:
+- beleg_typ: rechnung | handwerkerrechnung | lohnsteuerbescheinigung | spendenbescheinigung | versicherungsnachweis | kontoauszug | nebenkostenabrechnung | arztrechnung | fahrtkosten | bewirtungsbeleg | sonstig
+- aussteller: Name der Firma/Person die den Beleg ausgestellt hat
+- beschreibung: Kurzbeschreibung des Belegs (max 100 Zeichen)
+- betrag_brutto: Gesamtbetrag inkl. MwSt
+- betrag_netto: Nettobetrag ohne MwSt (null falls nicht angegeben)
+- mwst_satz: MwSt-Prozentsatz (7 oder 19, null falls nicht erkennbar)
+- mwst_betrag: MwSt-Betrag in Euro
+- datum_beleg: Rechnungs-/Belegdatum
+- rechnungsnummer: Rechnungs- oder Belegnummer
+- steuer_kategorie: Eine der folgenden Kategorien:
+  Werbungskosten | Sonderausgaben | Außergewöhnliche Belastungen | Haushaltsnahe Dienstleistungen §35a | Handwerkerleistungen §35a | Vorsorgeaufwendungen | Spenden und Mitgliedsbeiträge | Einkünfte nichtselbständige Arbeit | Einkünfte selbständige Arbeit | Einkünfte Vermietung/Verpachtung
+- skr03_konto: 4-stelliges SKR03-Konto (z.B. 4946 für Fremdleistungen, 4210 für Miete)
+- arbeitskosten_35a: Nur der Arbeits-/Lohnanteil bei Handwerkerrechnungen oder haushaltsnahen Dienstleistungen (§35a EStG absetzbar)
+- materialkosten: Nur der Materialanteil (NICHT absetzbar nach §35a)"""
 
-async def extract_with_langextract(ocr_text: str) -> Optional[dict]:
-    """Extract with LangExtract – returns structured data WITH source grounding."""
-    try:
-        import langextract as lx
-    except ImportError:
-        logger.warning("LangExtract not installed, using fallback")
-        return None
+ONE_SHOT_EXAMPLE = """
+BEISPIEL:
+OCR-Text: "Rechnung Nr. 2024-0815\\nMalermeister Schmidt GmbH\\nAnstricharbeiten Wohnzimmer\\nArbeitskosten: 1.200,00 €\\nMaterial: 340,00 €\\nNetto: 1.540,00 €\\nMwSt 19%: 292,60 €\\nBrutto: 1.832,60 €\\nDatum: 15.03.2024"
 
-    examples = _langextract_examples()
-    if not examples:
-        return None
+Antwort:
+{"beleg_typ": "handwerkerrechnung", "aussteller": "Malermeister Schmidt GmbH", "beschreibung": "Anstricharbeiten Wohnzimmer", "betrag_brutto": 1832.60, "betrag_netto": 1540.00, "mwst_satz": 19, "mwst_betrag": 292.60, "datum_beleg": "15.03.2024", "rechnungsnummer": "2024-0815", "steuer_kategorie": "Handwerkerleistungen §35a", "skr03_konto": "4946", "arbeitskosten_35a": 1200.00, "materialkosten": 340.00}
+"""
 
-    prompt = (
-        "Analysiere diesen deutschen Steuerbeleg und extrahiere alle steuerlich relevanten Informationen. "
-        "Identifiziere: Belegtyp, Aussteller, Beträge (brutto/netto/MwSt), Datum, steuerliche Kategorie, "
-        "SKR03-Konto, Rechnungsnummer, und ob §35a-Arbeitskosten enthalten sind. "
-        "Bei Handwerkerrechnungen: trenne Arbeitskosten (§35a) von Materialkosten. "
-        "Deutsche Zahlenformate: 1.234,56 → im Output als 1234.56"
-    )
+USER_PROMPT = """Analysiere diesen OCR-Text und extrahiere die steuerlich relevanten Daten als JSON:
 
-    try:
-        result = lx.extract(
-            text_or_documents=ocr_text,
-            prompt_description=prompt,
-            examples=examples,
-            model_id=OLLAMA_MODEL,
-            model_url=OLLAMA_URL,
-            fence_output=False,
-            use_schema_constraints=False,
-        )
-
-        if not result or not result.extractions:
-            return None
-
-        ext = result.extractions[0]
-        attrs = ext.attributes if hasattr(ext, 'attributes') else {}
-
-        # Build source grounding spans
-        spans = []
-        if hasattr(ext, 'spans') and ext.spans:
-            for s in ext.spans:
-                span_text = ocr_text[s.start:s.end] if s.start < len(ocr_text) else ""
-                spans.append({
-                    "start": s.start, "end": s.end,
-                    "text": span_text,
-                    "feld": getattr(s, 'label', None)
-                })
-
-        # If LangExtract didn't produce spans, build them ourselves via text search
-        if not spans:
-            spans = _build_source_spans(ocr_text, attrs)
-
-        return {
-            "extrahierte_daten": attrs,
-            "quellreferenzen": spans,
-            "methode": "langextract",
-            "konfidenz": _assess_confidence(attrs)
-        }
-
-    except Exception as e:
-        logger.error(f"LangExtract error: {e}")
-        return None
-
-
-# ════════════════════════════════════════════
-#  Ollama Fallback (no source grounding from LLM, but we build it post-hoc)
-# ════════════════════════════════════════════
-
-EXTRACTION_PROMPT = """Du bist ein Experte für deutsche Steuerdokumente. Analysiere den OCR-Text und extrahiere als JSON.
-
-NUR valides JSON, kein anderer Text:
-{{
-  "beleg_typ": "rechnung|handwerkerrechnung|lohnsteuerbescheinigung|spendenbescheinigung|versicherungsnachweis|kontoauszug|nebenkostenabrechnung|arztrechnung|fahrtkosten|bewirtungsbeleg|sonstig",
-  "aussteller": "Name",
-  "beschreibung": "Kurzbeschreibung",
-  "betrag_brutto": 0.00,
-  "betrag_netto": 0.00,
-  "mwst_satz": 19,
-  "mwst_betrag": 0.00,
-  "datum_beleg": "TT.MM.JJJJ",
-  "rechnungsnummer": "falls vorhanden",
-  "steuer_kategorie": "Werbungskosten|Sonderausgaben|Außergewöhnliche Belastungen|Haushaltsnahe Dienstleistungen §35a|Handwerkerleistungen §35a|Vorsorgeaufwendungen|Spenden und Mitgliedsbeiträge|Einkünfte nichtselbständige Arbeit",
-  "skr03_konto": "4-stellig",
-  "arbeitskosten_35a": 0.00,
-  "materialkosten": 0.00,
-  "konfidenz": "hoch|mittel|niedrig"
-}}
-
-Wichtig: Bei Handwerkerrechnungen und Nebenkostenabrechnungen trenne Arbeitskosten (§35a absetzbar) von Materialkosten (nicht absetzbar). arbeitskosten_35a = nur Lohn-/Arbeitsanteil. materialkosten = Material, Verbrauchsstoffe, Entsorgung etc.
-Deutsche Zahlen: 1.234,56 → 1234.56 im JSON. Unbekannte Felder: null.
-
-OCR-TEXT:
 {text}"""
 
 
-async def extract_with_ollama(ocr_text: str) -> dict:
-    """Direct Ollama extraction with post-hoc source grounding."""
-    prompt = EXTRACTION_PROMPT.format(text=ocr_text[:4000])
+def _clean_extracted_data(data: dict) -> dict:
+    """Bereinige LLM-Output: String-Nulls, leere Strings, ungültige Werte."""
+    cleaned = {}
+    for key, value in data.items():
+        # "null", "None", "", "N/A" → None
+        if isinstance(value, str) and value.strip().lower() in ("null", "none", "", "n/a", "nicht angegeben", "unbekannt"):
+            cleaned[key] = None
+        # 0 bei optionalen Geldbeträgen → None (LLM gibt oft 0.00 statt null)
+        elif isinstance(value, (int, float)) and value == 0 and key in (
+            "betrag_netto", "mwst_betrag", "mwst_satz", "arbeitskosten_35a", "materialkosten"
+        ):
+            cleaned[key] = None
+        else:
+            cleaned[key] = value
+    return cleaned
+
+
+def _parse_json_from_llm(raw: str) -> Optional[dict]:
+    """Robust JSON-Parsing aus LLM-Output (mit/ohne Markdown-Fences)."""
+    if not raw or not raw.strip():
+        return None
+
+    # Versuch 1: Markdown ```json ... ``` Block
+    fence_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', raw)
+    if fence_match:
+        try:
+            return json.loads(fence_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # Versuch 2: Erstes JSON-Objekt im Text
+    json_match = re.search(r'\{[\s\S]*\}', raw)
+    if json_match:
+        try:
+            return json.loads(json_match.group())
+        except json.JSONDecodeError:
+            pass
+
+    # Versuch 3: Ganzer Text als JSON
+    try:
+        return json.loads(raw.strip())
+    except json.JSONDecodeError:
+        pass
+
+    return None
+
+
+async def extract_with_ollama(ocr_text: str, retry: bool = True) -> dict:
+    """Extrahiert steuerlich relevante Daten via Ollama mit post-hoc Source Grounding."""
+    prompt = f"{SYSTEM_PROMPT}\n{ONE_SHOT_EXAMPLE}\n{USER_PROMPT.format(text=ocr_text[:4000])}"
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             resp = await client.post(f"{OLLAMA_URL}/api/generate", json={
                 "model": OLLAMA_MODEL,
                 "prompt": prompt,
                 "stream": False,
-                "options": {"temperature": 0.1, "num_predict": 1024}
+                "options": {"temperature": 0.1, "num_predict": 1500}
             })
             resp.raise_for_status()
             raw = resp.json().get("response", "")
-            match = re.search(r'\{[\s\S]*\}', raw)
-            if match:
-                data = json.loads(match.group())
-                spans = _build_source_spans(ocr_text, data)
+            logger.info(f"Ollama raw response length: {len(raw)}")
+
+            data = _parse_json_from_llm(raw)
+
+            # Retry einmal bei Parse-Fehler (LLM kann inkonsistent sein)
+            if data is None and retry:
+                logger.warning("JSON parse failed, retrying extraction...")
+                return await extract_with_ollama(ocr_text, retry=False)
+
+            if data is None:
+                logger.error(f"Could not parse JSON from Ollama response: {raw[:200]}")
                 return {
-                    "extrahierte_daten": data,
-                    "quellreferenzen": spans,
+                    "extrahierte_daten": {},
+                    "quellreferenzen": [],
                     "methode": "ollama_direkt",
-                    "konfidenz": data.get("konfidenz", "mittel")
+                    "konfidenz": "niedrig"
                 }
+
+            data = _clean_extracted_data(data)
+            spans = _build_source_spans(ocr_text, data)
+
+            return {
+                "extrahierte_daten": data,
+                "quellreferenzen": spans,
+                "methode": "ollama_direkt",
+                "konfidenz": _assess_confidence(data)
+            }
+
+    except httpx.ConnectError:
+        logger.error(f"Ollama not reachable at {OLLAMA_URL}")
+    except httpx.TimeoutException:
+        logger.error(f"Ollama timeout after 180s")
     except Exception as e:
         logger.error(f"Ollama error: {e}")
 
-    return {"extrahierte_daten": {}, "quellreferenzen": [], "methode": "fehler", "konfidenz": "niedrig"}
+    return {
+        "extrahierte_daten": {},
+        "quellreferenzen": [],
+        "methode": "fehler",
+        "konfidenz": "niedrig"
+    }
 
 
 # ════════════════════════════════════════════
@@ -230,8 +164,8 @@ async def extract_with_ollama(ocr_text: str) -> dict:
 # ════════════════════════════════════════════
 
 def _build_source_spans(ocr_text: str, attrs: dict) -> list:
-    """Build source grounding by finding extracted values in the OCR text.
-    This is the fallback when LangExtract doesn't provide native spans."""
+    """Findet extrahierte Werte im OCR-Text und erstellt Source-Grounding-Spans.
+    Jeder Span zeigt: wo im Originaltext steht der extrahierte Wert."""
     spans = []
     text_lower = ocr_text.lower()
 
@@ -244,20 +178,23 @@ def _build_source_spans(ocr_text: str, attrs: dict) -> list:
         "rechnungsnummer": attrs.get("rechnungsnummer"),
         "arbeitskosten_35a": attrs.get("arbeitskosten_35a"),
         "materialkosten": attrs.get("materialkosten"),
+        "beschreibung": attrs.get("beschreibung"),
     }
 
     for feld, value in search_fields.items():
-        if not value or value == "null":
+        if value is None:
             continue
         value_str = str(value)
+        if not value_str or value_str == "null":
+            continue
 
-        # Try exact match first
+        # Exakte Suche
         idx = ocr_text.find(value_str)
         if idx >= 0:
             spans.append({"start": idx, "end": idx + len(value_str), "text": value_str, "feld": feld})
             continue
 
-        # Try German number format (1234.56 → 1.234,56)
+        # Deutsche Zahlenformate (1234.56 → 1.234,56)
         if re.match(r'^\d+\.?\d*$', value_str):
             german = _to_german_number(value_str)
             for variant in [german, value_str.replace(".", ",")]:
@@ -265,34 +202,49 @@ def _build_source_spans(ocr_text: str, attrs: dict) -> list:
                 if idx >= 0:
                     spans.append({"start": idx, "end": idx + len(variant), "text": variant, "feld": feld})
                     break
+            else:
+                # Auch ohne Tausender-Trenner suchen (z.B. "1200,00" statt "1.200,00")
+                simple = value_str.split(".")[0] + "," + (value_str.split(".")[1] if "." in value_str else "00")
+                idx = ocr_text.find(simple)
+                if idx >= 0:
+                    spans.append({"start": idx, "end": idx + len(simple), "text": simple, "feld": feld})
 
-        # Try case-insensitive for text fields
-        if feld in ("aussteller", "rechnungsnummer"):
+        # Case-insensitive für Textfelder + Teilstring-Matching
+        if feld in ("aussteller", "rechnungsnummer", "beschreibung"):
             idx = text_lower.find(value_str.lower())
             if idx >= 0:
                 spans.append({"start": idx, "end": idx + len(value_str), "text": ocr_text[idx:idx+len(value_str)], "feld": feld})
+            elif feld == "aussteller" and len(value_str) > 5:
+                # Fuzzy: Suche nach den ersten 2 Wörtern des Ausstellers (OCR-Fehler-tolerant)
+                words = value_str.split()[:2]
+                if len(words) >= 2:
+                    pattern = re.escape(words[0]) + r'[\s\-]+' + re.escape(words[1])
+                    match = re.search(pattern, ocr_text, re.IGNORECASE)
+                    if match:
+                        spans.append({"start": match.start(), "end": match.end(), "text": match.group(), "feld": feld})
 
     return spans
 
 
 def _to_german_number(n: str) -> str:
-    """Convert 1234.56 to 1.234,56."""
+    """Konvertiert 1234.56 → 1.234,56."""
     try:
         f = float(n)
         integer_part = int(f)
-        decimal_part = f - integer_part
+        decimal_part = round(f - integer_part, 2)
         formatted_int = f"{integer_part:,}".replace(",", ".")
         if decimal_part > 0:
-            return f"{formatted_int},{decimal_part:.2f}"[:-1].split(",")[0] + f",{round(decimal_part * 100):02d}"
+            dec_str = f"{decimal_part:.2f}"[2:]  # ".56" → "56"
+            return f"{formatted_int},{dec_str}"
         return f"{formatted_int},00"
     except (ValueError, TypeError):
         return n
 
 
 def _assess_confidence(attrs: dict) -> str:
-    """Assess extraction confidence based on field completeness."""
+    """Bewertet Extraktionsqualität anhand Feld-Vollständigkeit."""
     required = ["beleg_typ", "betrag_brutto", "aussteller", "datum_beleg"]
-    found = sum(1 for f in required if attrs.get(f) and attrs[f] != "null")
+    found = sum(1 for f in required if attrs.get(f) is not None)
     if found >= 4:
         return "hoch"
     elif found >= 2:
@@ -301,7 +253,7 @@ def _assess_confidence(attrs: dict) -> str:
 
 
 # ════════════════════════════════════════════
-#  Auto-Kontierung (SKR03 mapping)
+#  Auto-Kontierung (SKR03 Mapping)
 # ════════════════════════════════════════════
 
 KONTIERUNG_MAP = {
@@ -318,7 +270,7 @@ KONTIERUNG_MAP = {
 
 
 def auto_kontierung(beleg_typ: str, mwst_satz: float = None) -> dict:
-    """Auto-assign SKR03 account based on document type."""
+    """Auto-Kontierung: SKR03-Konto anhand Belegtyp zuweisen."""
     entry = KONTIERUNG_MAP.get(beleg_typ, ("4900", "Sonst. betriebl. Aufwend.", ""))
     bu = entry[2]
     if mwst_satz and not bu:
@@ -331,12 +283,10 @@ def auto_kontierung(beleg_typ: str, mwst_satz: float = None) -> dict:
 # ════════════════════════════════════════════
 
 async def extract_beleg(ocr_text: str) -> dict:
-    """Main extraction: tries LangExtract first, falls back to Ollama."""
-    result = await extract_with_langextract(ocr_text)
-    if not result:
-        result = await extract_with_ollama(ocr_text)
+    """Hauptfunktion: Extrahiert Belegdaten via Ollama + Auto-Kontierung."""
+    result = await extract_with_ollama(ocr_text)
 
-    # Auto-kontierung if not provided
+    # Auto-Kontierung falls nicht vom LLM geliefert
     data = result.get("extrahierte_daten", {})
     if data.get("beleg_typ") and not data.get("skr03_konto"):
         mwst = None
