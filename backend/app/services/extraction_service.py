@@ -33,11 +33,14 @@ REGELN:
 - Bei Handwerkerrechnungen/Nebenkostenabrechnungen: trenne Arbeitskosten (§35a absetzbar) von Materialkosten (nicht absetzbar)
 - Bei Kassenbons/Kassenzettel: Aussteller = Filialname/Marke (z.B. "REWE", "EDEKA", "dm"), Beschreibung = "Einkauf [Filiale]", Betrag = Summe/Total/GESAMT-Zeile, betrag_netto und arbeitskosten_35a sind null
 
-QUELLENNACHWEISE (Source Grounding):
+QUELLENNACHWEISE (Source Grounding) – SEHR WICHTIG:
 - Für JEDEN extrahierten Wert gib zusätzlich "quelle" an
 - "quelle" = der EXAKTE Textausschnitt aus dem OCR-Text, aus dem du den Wert abgeleitet hast
-- Kopiere den Text GENAU wie er im OCR-Text steht (inkl. Sonderzeichen, Leerzeichen)
-- Für abgeleitete Felder (beleg_typ, steuer_kategorie, skr03_konto): quelle = null
+- KOPIERE den Text WORTGENAU wie er im OCR-Text steht (inkl. Sonderzeichen, Leerzeichen, €-Zeichen)
+- NICHT umformulieren, NICHT kürzen – einfach Copy-Paste aus dem OCR-Text oben
+- Beispiel: Wenn im OCR-Text steht "Brutto: 1.832,60 €" dann ist quelle = "Brutto: 1.832,60 €"
+- Beispiel: Wenn im OCR-Text steht "Rechnungsdatum: 15.03.2024" dann ist quelle = "Rechnungsdatum: 15.03.2024"
+- Für abgeleitete Felder (beleg_typ, steuer_kategorie, skr03_konto, beschreibung): quelle = null
 - Format pro Feld: {"wert": <extrahierter_wert>, "quelle": "<exakter_OCR_text>" oder null}
 
 FELDER:
@@ -158,17 +161,34 @@ def _build_source_spans_from_quotes(ocr_text: str, quotes: dict) -> list:
 
     Das LLM hat für jeden Wert ein 'quelle'-Feld geliefert (exakter Textausschnitt).
     Hier finden wir die Position dieses Ausschnitts im Original-OCR-Text.
+    Probiert auch Varianten mit €/EUR Austausch und Sonderzeichen-Normalisierung.
     """
     spans = []
     for feld, quote in quotes.items():
         if not quote or not isinstance(quote, str) or len(quote.strip()) < 2:
             continue
 
-        span = _locate_quote_in_text(ocr_text, quote.strip(), feld)
+        q = quote.strip()
+        span = _locate_quote_in_text(ocr_text, q, feld)
+
+        # Varianten-Suche: €/EUR austauschen, Sonderzeichen normalisieren
+        if not span:
+            variants = [
+                q.replace('\u20ac', 'EUR'),
+                q.replace('EUR', '\u20ac'),
+                q.replace('\u20ac', 'Euro'),
+                q.replace('  ', ' '),  # Doppelte Leerzeichen
+            ]
+            for v in variants:
+                if v != q:
+                    span = _locate_quote_in_text(ocr_text, v, feld)
+                    if span:
+                        break
+
         if span:
             spans.append(span)
         else:
-            logger.debug(f"Source quote not found for '{feld}': '{quote[:50]}'")
+            logger.debug(f"Source quote not found for '{feld}': '{q[:50]}'")
 
     return spans
 
@@ -203,7 +223,7 @@ def _locate_quote_in_text(ocr_text: str, quote: str, feld: str) -> Optional[dict
 
     # Tier 4: Fuzzy (nur für nicht-triviale Strings)
     if len(quote) >= 5:
-        result = _fuzzy_slide_match(ocr_text, quote, threshold=0.80)
+        result = _fuzzy_slide_match(ocr_text, quote, threshold=0.65)
         if result:
             start, end = result
             return {"start": start, "end": end, "text": ocr_text[start:end], "feld": feld}
@@ -212,8 +232,12 @@ def _locate_quote_in_text(ocr_text: str, quote: str, feld: str) -> Optional[dict
 
 
 def _normalize_text(text: str) -> str:
-    """Normalisiert Text: Whitespace kollabieren, Lowercase."""
-    return re.sub(r'\s+', ' ', text).strip().lower()
+    """Normalisiert Text: Whitespace kollabieren, Sonderzeichen vereinheitlichen, Lowercase."""
+    t = re.sub(r'\s+', ' ', text).strip().lower()
+    # Unicode-Varianten vereinheitlichen (€, –, — etc.)
+    t = t.replace('\u20ac', 'eur').replace('\u2013', '-').replace('\u2014', '-')
+    t = t.replace('\u00a7', 'p').replace('\u00b0', '')  # § → p, ° entfernen
+    return t
 
 
 def _map_normalized_pos(original: str, normalized: str, norm_start: int, norm_len: int) -> tuple:
@@ -335,17 +359,18 @@ def _build_source_spans(ocr_text: str, attrs: dict) -> list:
             spans.append({"start": idx, "end": idx + len(value_str), "text": value_str, "feld": feld})
             continue
 
-        # Deutsche Zahlenformate (1234.56 → 1.234,56)
+        # Deutsche Zahlenformate (1234.56 → 1.234,56 / 1.234,56 € etc.)
         if re.match(r'^\d+\.?\d*$', value_str):
-            german = _to_german_number(value_str)
-            for variant in [german, value_str.replace(".", ",")]:
+            found_num = False
+            for variant in _german_number_variants(value_str):
                 idx = ocr_text.find(variant)
                 if idx >= 0:
                     spans.append({"start": idx, "end": idx + len(variant), "text": variant, "feld": feld})
+                    found_num = True
                     break
-            else:
-                # Ohne Tausender-Trenner (z.B. "1200,00")
-                simple = value_str.split(".")[0] + "," + (value_str.split(".")[1] if "." in value_str else "00")
+            if not found_num:
+                # Letzter Versuch: einfache Komma-Ersetzung
+                simple = value_str.replace(".", ",")
                 idx = ocr_text.find(simple)
                 if idx >= 0:
                     spans.append({"start": idx, "end": idx + len(simple), "text": simple, "feld": feld})
@@ -381,6 +406,40 @@ def _to_german_number(n: str) -> str:
         return n
 
 
+def _german_number_variants(n: str) -> list:
+    """Generate all German number format variants for a numeric value.
+
+    E.g. for "1832.60" returns: ["1.832,60", "1832,60", "1.832,60 €",
+    "1832,60 €", "1.832,60€", "1832,60€"]
+    """
+    variants = []
+    try:
+        f = float(n)
+        integer_part = int(f)
+        decimal_part = round(f - integer_part, 2)
+
+        # With thousands separator
+        with_sep = f"{integer_part:,}".replace(",", ".")
+        dec_str = f"{decimal_part:.2f}"[2:] if decimal_part > 0 else "00"
+        v1 = f"{with_sep},{dec_str}"
+        variants.append(v1)
+
+        # Without thousands separator
+        v2 = f"{integer_part},{dec_str}"
+        if v2 != v1:
+            variants.append(v2)
+
+        # With € (space and no space)
+        for v in [v1, v2]:
+            variants.append(f"{v} \u20ac")
+            variants.append(f"{v}\u20ac")
+            variants.append(f"{v} EUR")
+
+    except (ValueError, TypeError):
+        pass
+    return variants
+
+
 # ════════════════════════════════════════════
 #  Confidence Assessment
 # ════════════════════════════════════════════
@@ -388,15 +447,21 @@ def _to_german_number(n: str) -> str:
 def _assess_confidence(attrs: dict, spans: list = None) -> str:
     """Bewertet Extraktionsqualität: Feld-Vollständigkeit + Source Grounding.
 
-    Kassenbons haben weniger Felder (kein Netto, keine Rechnungsnr.) und
-    bekommen deshalb angepasste Schwellwerte.
+    Dreistufig: hoch / mittel / niedrig.
+    Kassenbons haben angepasste Schwellwerte (weniger Felder erwartbar).
+    Rechnungen: 4 Pflichtfelder + mind. 1 gegrounded reicht für "hoch".
     """
     required = ["beleg_typ", "betrag_brutto", "aussteller", "datum_beleg"]
     found = sum(1 for f in required if attrs.get(f) is not None)
 
-    # Bonus: Wie viele Felder sind source-gegrundet?
+    # Bonus-Felder zählen auch mit (Zeichen für saubere Extraktion)
+    bonus_fields = ["rechnungsnummer", "mwst_satz", "mwst_betrag", "betrag_netto", "beschreibung"]
+    bonus = sum(1 for f in bonus_fields if attrs.get(f) is not None)
+
+    # Wie viele Felder sind source-gegrundet?
     grounded = set(s["feld"] for s in (spans or []))
-    grounded_count = sum(1 for f in ["betrag_brutto", "aussteller", "datum_beleg"] if f in grounded)
+    grounded_count = sum(1 for f in ["betrag_brutto", "aussteller", "datum_beleg",
+                                      "rechnungsnummer", "mwst_betrag"] if f in grounded)
 
     beleg_typ = attrs.get("beleg_typ", "")
 
@@ -409,10 +474,13 @@ def _assess_confidence(attrs: dict, spans: list = None) -> str:
             return "mittel"
         return "niedrig"
 
-    # Standard-Logik für andere Belegtypen
-    if found >= 4 and grounded_count >= 2:
+    # Standard-Logik für Rechnungen und andere Belegtypen:
+    # "hoch": 4 Pflichtfelder + mind. 1 gegrounded ODER 3 Pflicht + 3 Bonus
+    if found >= 4 and (grounded_count >= 1 or bonus >= 3):
         return "hoch"
-    elif found >= 3:
+    elif found >= 3 and grounded_count >= 1:
+        return "hoch"
+    elif found >= 3 or (found >= 2 and bonus >= 2):
         return "mittel"
     elif found >= 2:
         return "mittel"
@@ -425,7 +493,7 @@ def _assess_confidence(attrs: dict, spans: list = None) -> str:
 
 async def extract_with_ollama(ocr_text: str, retry: bool = True) -> dict:
     """Extrahiert Daten via Ollama mit LLM-nativem Source Grounding."""
-    prompt = f"{SYSTEM_PROMPT}\n{ONE_SHOT_EXAMPLE}\n{USER_PROMPT.format(text=ocr_text[:4000])}"
+    prompt = f"{SYSTEM_PROMPT}\n{ONE_SHOT_EXAMPLE}\n{USER_PROMPT.format(text=ocr_text[:6000])}"
 
     try:
         async with httpx.AsyncClient(timeout=180.0) as client:

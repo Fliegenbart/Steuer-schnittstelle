@@ -416,6 +416,83 @@ tr { cursor: pointer; transition: background var(--transition); }
 
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
+/* ── Month Grouping ────────────────── */
+.month-group { margin-top: 18px; }
+.month-group:first-child { margin-top: 0; }
+.month-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition);
+}
+.month-header:hover { background: var(--bg-card-hover); }
+.month-header h3 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.month-summary {
+  display: flex;
+  gap: 20px;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  align-items: center;
+}
+.month-summary .amount {
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+.month-summary .count {
+  background: var(--accent-glow);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-weight: 600;
+  font-size: 0.72rem;
+}
+.month-chevron {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  transition: transform var(--transition);
+}
+.month-chevron.collapsed { transform: rotate(-90deg); }
+.month-body {
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  overflow: hidden;
+}
+.month-body table { margin: 0; }
+.month-body th { position: sticky; top: 0; z-index: 1; }
+.month-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: var(--font);
+  transition: all var(--transition);
+}
+.month-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.month-toggle.active { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
+
 /* ── Upload Drop Zone ───────────────── */
 .dropzone {
   border: 2px dashed var(--border);
@@ -946,6 +1023,10 @@ tr { cursor: pointer; transition: background var(--transition); }
             Belege <span id="belege-count" style="color:var(--text-dim);font-weight:400;"></span>
           </h2>
           <div style="display:flex;gap:10px;">
+            <button class="month-toggle active" id="month-toggle-btn" onclick="toggleMonthView()" title="Nach Monaten gruppieren">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              Monate
+            </button>
             <button class="btn btn-ghost" onclick="refreshBelege()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
               Aktualisieren
@@ -975,17 +1056,8 @@ tr { cursor: pointer; transition: background var(--transition); }
           <div class="progress-bar"><div class="progress-fill" id="upload-bar" style="width:0%"></div></div>
         </div>
 
-        <!-- Belege Table -->
-        <div class="card" style="margin-top:16px;">
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Datei</th><th>Typ</th><th>Aussteller</th><th>Betrag</th><th>Konto</th><th>Status</th><th>Konfidenz</th><th>DATEV</th></tr>
-              </thead>
-              <tbody id="belege-table"></tbody>
-            </table>
-          </div>
-        </div>
+        <!-- Belege Table / Month Groups -->
+        <div id="belege-container" style="margin-top:16px;"></div>
       </div>
 
       <!-- DATEV View -->
@@ -1083,7 +1155,12 @@ let state = {
   steuerjahrId: null,
   belege: [],
   activeField: null,  // Source Grounding: aktuell selektiertes Feld
+  monthView: true,    // Monatsgruppierung an/aus (Default: an)
+  collapsedMonths: new Set(),  // Eingeklappte Monate
 };
+
+const MONATE = ['Januar','Februar','M\u00e4rz','April','Mai','Juni',
+                'Juli','August','September','Oktober','November','Dezember'];
 
 // ── API Helpers ──────────────────────
 async function api(path, opts = {}) {
@@ -1295,21 +1372,147 @@ async function loadBelege() {
 
 function refreshBelege() { loadBelege(); }
 
+function parseBelegMonth(d) {
+  if (!d) return null;
+  var parts = d.includes('.') ? d.split('.') : d.split('-');
+  if (parts.length >= 3) {
+    var jahr = d.includes('.') ? parts[2] : parts[0];
+    var monat = d.includes('.') ? parts[1] : parts[1];
+    if (jahr.length === 2) jahr = '20' + jahr;
+    return jahr + '-' + monat.padStart(2, '0');
+  }
+  return null;
+}
+
+function parseBelegDay(d) {
+  if (!d) return '';
+  var parts = d.includes('.') ? d.split('.') : d.split('-');
+  if (parts.length >= 2) {
+    var tag = d.includes('.') ? parts[0] : parts[2];
+    var monat = d.includes('.') ? parts[1] : parts[1];
+    return tag.padStart(2, '0') + '.' + monat.padStart(2, '0') + '.';
+  }
+  return d;
+}
+
+function toggleMonthView() {
+  state.monthView = !state.monthView;
+  var btn = document.getElementById('month-toggle-btn');
+  if (btn) btn.classList.toggle('active', state.monthView);
+  renderBelege();
+}
+
+function toggleMonth(key) {
+  if (state.collapsedMonths.has(key)) {
+    state.collapsedMonths.delete(key);
+  } else {
+    state.collapsedMonths.add(key);
+  }
+  renderBelege();
+}
+
+function belegRow(b, showDate) {
+  var konfDot = b.extraktion_konfidenz === 'hoch' ? 'var(--success)' : (b.extraktion_konfidenz === 'mittel' ? 'var(--warning)' : 'var(--danger)');
+  return '<tr onclick="openBeleg(' + b.id + ')">' +
+    '<td title="' + b.dateiname + '" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + b.dateiname + '</td>' +
+    '<td>' + (b.beleg_typ || '-') + '</td>' +
+    '<td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (b.aussteller || '-') + '</td>' +
+    (showDate ? '<td style="font-family:var(--mono);font-size:0.8rem;white-space:nowrap;">' + (b.datum_beleg || '-') + '</td>' : '<td style="font-family:var(--mono);font-size:0.8rem;white-space:nowrap;">' + parseBelegDay(b.datum_beleg) + '</td>') +
+    '<td style="font-family:var(--mono);text-align:right;">' + (b.betrag_brutto != null ? fmt(b.betrag_brutto) + ' &euro;' : '-') + '</td>' +
+    '<td style="font-family:var(--mono);">' + (b.skr03_konto || '-') + '</td>' +
+    '<td>' + statusLabel(b.status) + '</td>' +
+    '<td>' + (b.extraktion_konfidenz ? '<span class="konfidenz-dot" style="background:' + konfDot + '"></span><span class="konfidenz-' + b.extraktion_konfidenz + '">' + b.extraktion_konfidenz + '</span>' : '-') + '</td>' +
+    '<td>' + (b.datev_sync_status === 'synced' ? '<span style="color:var(--datev-green);font-weight:700;">&#10003;</span>' : (b.datev_sync_status === 'error' ? '<span style="color:var(--danger);">&#10007;</span>' : '-')) + '</td>' +
+  '</tr>';
+}
+
+function belegTableHead(showFullDate) {
+  return '<thead><tr><th>Datei</th><th>Typ</th><th>Aussteller</th><th>Datum</th><th>Betrag</th><th>Konto</th><th>Status</th><th>Konfidenz</th><th>DATEV</th></tr></thead>';
+}
+
 function renderBelege() {
   document.getElementById('belege-count').textContent = '(' + state.belege.length + ')';
-  document.getElementById('belege-table').innerHTML = state.belege.map(b => {
-    const konfDot = b.extraktion_konfidenz === 'hoch' ? 'var(--success)' : (b.extraktion_konfidenz === 'mittel' ? 'var(--warning)' : 'var(--danger)');
-    return '<tr onclick="openBeleg(' + b.id + ')">' +
-      '<td title="' + b.dateiname + '" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + b.dateiname + '</td>' +
-      '<td>' + (b.beleg_typ || '-') + '</td>' +
-      '<td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (b.aussteller || '-') + '</td>' +
-      '<td style="font-family:var(--mono);text-align:right;">' + (b.betrag_brutto != null ? fmt(b.betrag_brutto) + ' &euro;' : '-') + '</td>' +
-      '<td style="font-family:var(--mono);">' + (b.skr03_konto || '-') + '</td>' +
-      '<td>' + statusLabel(b.status) + '</td>' +
-      '<td>' + (b.extraktion_konfidenz ? '<span class="konfidenz-dot" style="background:' + konfDot + '"></span><span class="konfidenz-' + b.extraktion_konfidenz + '">' + b.extraktion_konfidenz + '</span>' : '-') + '</td>' +
-      '<td>' + (b.datev_sync_status === 'synced' ? '<span style="color:var(--datev-green);font-weight:700;">&#10003;</span>' : (b.datev_sync_status === 'error' ? '<span style="color:var(--danger);">&#10007;</span>' : '-')) + '</td>' +
-    '</tr>';
-  }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:40px;">Keine Belege vorhanden</td></tr>';
+  var container = document.getElementById('belege-container');
+
+  if (!state.belege.length) {
+    container.innerHTML = '<div class="card" style="padding:40px;text-align:center;color:var(--text-dim);">Keine Belege vorhanden</div>';
+    return;
+  }
+
+  // Flat view (no grouping)
+  if (!state.monthView) {
+    container.innerHTML = '<div class="card"><div class="table-wrap"><table>' +
+      belegTableHead(true) + '<tbody>' +
+      state.belege.map(function(b) { return belegRow(b, true); }).join('') +
+      '</tbody></table></div></div>';
+    return;
+  }
+
+  // Month grouped view
+  var groups = {};
+  state.belege.forEach(function(b) {
+    var key = parseBelegMonth(b.datum_beleg) || 'ohne-datum';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(b);
+  });
+
+  // Sort month keys descending, "ohne-datum" at the end
+  var keys = Object.keys(groups).sort(function(a, b) {
+    if (a === 'ohne-datum') return 1;
+    if (b === 'ohne-datum') return -1;
+    return b.localeCompare(a);
+  });
+
+  // Sort belege within each group by date descending
+  keys.forEach(function(k) {
+    groups[k].sort(function(a, b) {
+      var da = parseBelegMonth(a.datum_beleg) || '';
+      var db = parseBelegMonth(b.datum_beleg) || '';
+      if (da !== db) return db.localeCompare(da);
+      return (b.datum_beleg || '').localeCompare(a.datum_beleg || '');
+    });
+  });
+
+  var html = '';
+  keys.forEach(function(key) {
+    var belege = groups[key];
+    var collapsed = state.collapsedMonths.has(key);
+
+    // Month header
+    var label;
+    if (key === 'ohne-datum') {
+      label = 'Ohne Datum';
+    } else {
+      var parts = key.split('-');
+      var monatIdx = parseInt(parts[1], 10) - 1;
+      label = MONATE[monatIdx] + ' ' + parts[0];
+    }
+
+    var total = belege.reduce(function(s, b) { return s + (b.betrag_brutto || 0); }, 0);
+    var geprueft = belege.filter(function(b) { return b.manuell_geprueft || b.status === 'geprueft'; }).length;
+
+    html += '<div class="month-group">' +
+      '<div class="month-header" onclick="toggleMonth(\'' + key + '\')">' +
+        '<h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> ' + label + '</h3>' +
+        '<div class="month-summary">' +
+          '<span class="count">' + belege.length + ' Beleg' + (belege.length !== 1 ? 'e' : '') + '</span>' +
+          '<span class="amount">' + fmt(total) + ' &euro;</span>' +
+          (geprueft > 0 ? '<span style="color:var(--success);">' + geprueft + ' gepr&uuml;ft</span>' : '') +
+        '</div>' +
+        '<span class="month-chevron' + (collapsed ? ' collapsed' : '') + '">\u25BE</span>' +
+      '</div>';
+
+    if (!collapsed) {
+      html += '<div class="month-body"><div class="table-wrap"><table>' +
+        belegTableHead(false) + '<tbody>' +
+        belege.map(function(b) { return belegRow(b, false); }).join('') +
+        '</tbody></table></div></div>';
+    }
+
+    html += '</div>';
+  });
+
+  container.innerHTML = html;
 }
 
 function renderRecentBelege() {
