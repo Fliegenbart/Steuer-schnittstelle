@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     maesn_api_url: str = "https://api.maesn.com/v1"
     maesn_sandbox: bool = True
     upload_dir: str = "./uploads"
+    vision_model: str = "qwen2.5vl:7b-instruct-awq"
+    vision_threshold: float = 60.0  # OCR confidence below this triggers vision pass
 
     class Config:
         env_file = ".env"

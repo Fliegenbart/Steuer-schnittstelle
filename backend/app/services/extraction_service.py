@@ -1,11 +1,15 @@
-"""BelegSync – Extraction Service mit LLM-nativem Source Grounding.
+"""BelegSync – Extraction Service mit LLM-nativem Source Grounding + Vision-Dual-Pass.
 
 Extrahiert steuerlich relevante Daten aus OCR-Text via Ollama (Llama 3.1 8B).
 Eigenes Source Grounding: Das LLM liefert für jeden Wert den exakten Quelltext-
 Ausschnitt aus dem OCR-Text. So kann der Steuerberater jeden extrahierten Wert
 direkt im Originaldokument nachvollziehen (Explainable AI).
+
+Bei schlechter OCR-Qualität (< Schwellwert): Zusätzlicher Vision-Pass mit
+Qwen2.5-VL – liest das Originalbild direkt und ergänzt fehlende Felder.
 """
-import os, json, re, logging
+import os, json, re, logging, base64
+from pathlib import Path
 from typing import Optional
 import httpx
 
@@ -27,6 +31,7 @@ REGELN:
 - Unbekannte Felder: null (nicht "null", nicht "", nicht 0)
 - Datum im Format TT.MM.JJJJ
 - Bei Handwerkerrechnungen/Nebenkostenabrechnungen: trenne Arbeitskosten (§35a absetzbar) von Materialkosten (nicht absetzbar)
+- Bei Kassenbons/Kassenzettel: Aussteller = Filialname/Marke (z.B. "REWE", "EDEKA", "dm"), Beschreibung = "Einkauf [Filiale]", Betrag = Summe/Total/GESAMT-Zeile, betrag_netto und arbeitskosten_35a sind null
 
 QUELLENNACHWEISE (Source Grounding):
 - Für JEDEN extrahierten Wert gib zusätzlich "quelle" an
@@ -36,7 +41,7 @@ QUELLENNACHWEISE (Source Grounding):
 - Format pro Feld: {"wert": <extrahierter_wert>, "quelle": "<exakter_OCR_text>" oder null}
 
 FELDER:
-- beleg_typ: rechnung | handwerkerrechnung | lohnsteuerbescheinigung | spendenbescheinigung | versicherungsnachweis | kontoauszug | nebenkostenabrechnung | arztrechnung | fahrtkosten | bewirtungsbeleg | sonstig
+- beleg_typ: rechnung | handwerkerrechnung | lohnsteuerbescheinigung | spendenbescheinigung | versicherungsnachweis | kontoauszug | nebenkostenabrechnung | arztrechnung | fahrtkosten | bewirtungsbeleg | kassenbon | sonstig
 - aussteller: Name der Firma/Person
 - beschreibung: Kurzbeschreibung (max 100 Zeichen)
 - betrag_brutto: Gesamtbetrag inkl. MwSt
@@ -51,11 +56,17 @@ FELDER:
 - materialkosten: Materialanteil (NICHT absetzbar)"""
 
 ONE_SHOT_EXAMPLE = """
-BEISPIEL:
+BEISPIEL 1 (Handwerkerrechnung):
 OCR-Text: "Rechnung Nr. 2024-0815\\nMalermeister Schmidt GmbH\\nHauptstr. 12, 20095 Hamburg\\nAnstricharbeiten Wohnzimmer\\nArbeitskosten: 1.200,00 €\\nMaterial: 340,00 €\\nNetto: 1.540,00 €\\nMwSt 19%: 292,60 €\\nBrutto: 1.832,60 €\\nDatum: 15.03.2024"
 
 Antwort:
 {"beleg_typ": {"wert": "handwerkerrechnung", "quelle": null}, "aussteller": {"wert": "Malermeister Schmidt GmbH", "quelle": "Malermeister Schmidt GmbH"}, "beschreibung": {"wert": "Anstricharbeiten Wohnzimmer", "quelle": "Anstricharbeiten Wohnzimmer"}, "betrag_brutto": {"wert": 1832.60, "quelle": "Brutto: 1.832,60 \\u20ac"}, "betrag_netto": {"wert": 1540.00, "quelle": "Netto: 1.540,00 \\u20ac"}, "mwst_satz": {"wert": 19, "quelle": "MwSt 19%"}, "mwst_betrag": {"wert": 292.60, "quelle": "MwSt 19%: 292,60 \\u20ac"}, "datum_beleg": {"wert": "15.03.2024", "quelle": "Datum: 15.03.2024"}, "rechnungsnummer": {"wert": "2024-0815", "quelle": "Rechnung Nr. 2024-0815"}, "steuer_kategorie": {"wert": "Handwerkerleistungen \\u00a735a", "quelle": null}, "skr03_konto": {"wert": "4946", "quelle": null}, "arbeitskosten_35a": {"wert": 1200.00, "quelle": "Arbeitskosten: 1.200,00 \\u20ac"}, "materialkosten": {"wert": 340.00, "quelle": "Material: 340,00 \\u20ac"}}
+
+BEISPIEL 2 (Kassenbon):
+OCR-Text: "REWE Markt GmbH\\nFiliale 1234\\nSchloßstr. 15, 10965 Berlin\\n12.03.2024 14:23\\nBio Milch 3,5% 1,99\\nVollkornbrot 500g 2,49\\nApfel Braeburn 1kg 3,29\\n-----------\\nSumme EUR 7,77\\nMwSt 7% 0,51\\nBAR 10,00\\nRUCKGELD 2,23"
+
+Antwort:
+{"beleg_typ": {"wert": "kassenbon", "quelle": null}, "aussteller": {"wert": "REWE Markt GmbH", "quelle": "REWE Markt GmbH"}, "beschreibung": {"wert": "Einkauf REWE", "quelle": null}, "betrag_brutto": {"wert": 7.77, "quelle": "Summe EUR 7,77"}, "betrag_netto": {"wert": null, "quelle": null}, "mwst_satz": {"wert": 7, "quelle": "MwSt 7%"}, "mwst_betrag": {"wert": 0.51, "quelle": "MwSt 7% 0,51"}, "datum_beleg": {"wert": "12.03.2024", "quelle": "12.03.2024 14:23"}, "rechnungsnummer": {"wert": null, "quelle": null}, "steuer_kategorie": {"wert": "Werbungskosten", "quelle": null}, "skr03_konto": {"wert": "4900", "quelle": null}, "arbeitskosten_35a": {"wert": null, "quelle": null}, "materialkosten": {"wert": null, "quelle": null}}
 """
 
 USER_PROMPT = """Analysiere diesen OCR-Text und extrahiere die steuerlich relevanten Daten als JSON mit Quellennachweisen:
@@ -375,7 +386,11 @@ def _to_german_number(n: str) -> str:
 # ════════════════════════════════════════════
 
 def _assess_confidence(attrs: dict, spans: list = None) -> str:
-    """Bewertet Extraktionsqualität: Feld-Vollständigkeit + Source Grounding."""
+    """Bewertet Extraktionsqualität: Feld-Vollständigkeit + Source Grounding.
+
+    Kassenbons haben weniger Felder (kein Netto, keine Rechnungsnr.) und
+    bekommen deshalb angepasste Schwellwerte.
+    """
     required = ["beleg_typ", "betrag_brutto", "aussteller", "datum_beleg"]
     found = sum(1 for f in required if attrs.get(f) is not None)
 
@@ -383,6 +398,18 @@ def _assess_confidence(attrs: dict, spans: list = None) -> str:
     grounded = set(s["feld"] for s in (spans or []))
     grounded_count = sum(1 for f in ["betrag_brutto", "aussteller", "datum_beleg"] if f in grounded)
 
+    beleg_typ = attrs.get("beleg_typ", "")
+
+    # Kassenbons: weniger strenge Anforderungen
+    # (haben typisch nur Betrag + Aussteller/Filiale + Datum, selten Rechnungsnr.)
+    if beleg_typ == "kassenbon":
+        if found >= 3 and grounded_count >= 1:
+            return "hoch"
+        elif found >= 2:
+            return "mittel"
+        return "niedrig"
+
+    # Standard-Logik für andere Belegtypen
     if found >= 4 and grounded_count >= 2:
         return "hoch"
     elif found >= 3:
@@ -468,6 +495,127 @@ async def extract_with_ollama(ocr_text: str, retry: bool = True) -> dict:
 
 
 # ════════════════════════════════════════════
+#  Vision-LLM Dual-Pass (Qwen2.5-VL)
+# ════════════════════════════════════════════
+
+VISION_PROMPT = """Du siehst ein Foto eines deutschen Belegs (Kassenbon, Rechnung, Quittung).
+Extrahiere die folgenden Felder als JSON. Nur Felder die du SICHER lesen kannst.
+Unbekannte Felder: null.
+
+Felder: aussteller, betrag_brutto (als Dezimalzahl z.B. 7.77), datum_beleg (TT.MM.JJJJ), mwst_satz, mwst_betrag, rechnungsnummer, beleg_typ (kassenbon|rechnung|bewirtungsbeleg|sonstig), beschreibung
+
+Antworte NUR mit JSON, kein anderer Text."""
+
+
+async def _vision_extract(image_path: str) -> Optional[dict]:
+    """Extract data from document image using Vision-LLM (Qwen2.5-VL).
+
+    Reads the original image, converts to base64, and sends to Ollama
+    with the vision model. Returns parsed extraction dict or None on failure.
+    """
+    from backend.app.config import settings
+
+    if not settings.vision_model:
+        return None
+
+    path = Path(image_path)
+    if not path.exists():
+        logger.warning(f"Vision: Image not found: {image_path}")
+        return None
+
+    # For PDFs, we'd need to convert to image first
+    ext = path.suffix.lower()
+    if ext == ".pdf":
+        try:
+            from pdf2image import convert_from_path
+            images = convert_from_path(str(path), dpi=200, first_page=1, last_page=1)
+            if not images:
+                return None
+            import io
+            buf = io.BytesIO()
+            images[0].save(buf, format='JPEG', quality=85)
+            img_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+        except Exception as e:
+            logger.error(f"Vision: PDF to image failed: {e}")
+            return None
+    elif ext in ('.jpg', '.jpeg', '.png', '.tiff', '.bmp', '.webp'):
+        with open(path, 'rb') as f:
+            img_b64 = base64.b64encode(f.read()).decode('utf-8')
+    else:
+        logger.warning(f"Vision: Unsupported file type: {ext}")
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(f"{OLLAMA_URL}/api/generate", json={
+                "model": settings.vision_model,
+                "prompt": VISION_PROMPT,
+                "images": [img_b64],
+                "stream": False,
+                "options": {"temperature": 0.1, "num_predict": 1000}
+            })
+            resp.raise_for_status()
+            raw = resp.json().get("response", "")
+            logger.info(f"Vision response length: {len(raw)}")
+
+            data = _parse_json_from_llm(raw)
+            if data:
+                # Clean the extracted data
+                return _clean_extracted_data(data)
+
+            logger.warning(f"Vision: Could not parse JSON: {raw[:200]}")
+            return None
+
+    except httpx.ConnectError:
+        logger.warning(f"Vision model not reachable at {OLLAMA_URL}")
+    except httpx.TimeoutException:
+        logger.warning("Vision model timeout after 120s")
+    except Exception as e:
+        logger.warning(f"Vision extraction error: {e}")
+
+    return None
+
+
+def _merge_extractions(tesseract_data: dict, vision_data: dict) -> tuple:
+    """Merge Tesseract-LLM extraction with Vision-LLM extraction.
+
+    Strategy:
+    - Fields only Vision has → adopt (fills gaps from bad OCR)
+    - Fields only Tesseract has → keep (has source grounding)
+    - Both have same value → confidence boost
+    - Both have different values → prefer Tesseract (has source grounding)
+
+    Returns:
+        (merged_data, method_suffix) – e.g. ("vision_ergänzt", True)
+    """
+    if not vision_data:
+        return tesseract_data, False
+
+    merged = dict(tesseract_data)
+    vision_filled = []
+
+    # Key fields that Vision might fill
+    key_fields = ["aussteller", "betrag_brutto", "datum_beleg", "mwst_satz",
+                  "mwst_betrag", "rechnungsnummer", "beleg_typ", "beschreibung"]
+
+    for field in key_fields:
+        tess_val = tesseract_data.get(field)
+        vis_val = vision_data.get(field)
+
+        if vis_val is not None and tess_val is None:
+            # Vision found what Tesseract missed → adopt
+            merged[field] = vis_val
+            vision_filled.append(field)
+            logger.info(f"Vision filled '{field}': {vis_val}")
+
+    if vision_filled:
+        logger.info(f"Vision merge: filled {len(vision_filled)} fields: {vision_filled}")
+        return merged, True
+
+    return merged, False
+
+
+# ════════════════════════════════════════════
 #  Auto-Kontierung (SKR03 Mapping)
 # ════════════════════════════════════════════
 
@@ -481,6 +629,7 @@ KONTIERUNG_MAP = {
     "versicherungsnachweis": ("4300", "Versicherungen", ""),
     "nebenkostenabrechnung": ("4210", "Miete", ""),
     "lohnsteuerbescheinigung": ("4120", "Gehälter", ""),
+    "kassenbon": ("4900", "Sonst. betriebl. Aufwend.", "2"),
 }
 
 
@@ -571,18 +720,47 @@ def _enrich_spans_with_bboxes(spans: list, ocr_data: dict) -> list:
 #  Main Entry Point
 # ════════════════════════════════════════════
 
-async def extract_beleg(ocr_text: str, ocr_data: dict = None) -> dict:
+async def extract_beleg(ocr_text: str, ocr_data: dict = None,
+                        ocr_conf: float = 100.0, image_path: str = None) -> dict:
     """Hauptfunktion: Extrahiert Belegdaten via Ollama + Auto-Kontierung.
+
+    Bei schlechter OCR-Qualität wird ein zusätzlicher Vision-Pass gestartet,
+    der das Originalbild direkt liest und fehlende Felder ergänzt.
 
     Args:
         ocr_text: Full OCR text
         ocr_data: Optional word-level geometry from OCR service
-                  {pages: [{page, width, height, words: [{x,y,w,h,text,conf,char_start,char_end}]}]}
+        ocr_conf: OCR confidence (0-100), triggers vision pass if low
+        image_path: Path to original image (for vision pass)
     """
+    from backend.app.config import settings
+
     result = await extract_with_ollama(ocr_text)
 
-    # Auto-Kontierung falls nicht vom LLM geliefert
     data = result.get("extrahierte_daten", {})
+    methode = result.get("methode", "ollama_direkt")
+
+    # Vision Dual-Pass: bei schlechter OCR oder wenigen Kernfeldern
+    key_fields_found = sum(1 for f in ["betrag_brutto", "aussteller", "datum_beleg"]
+                          if data.get(f) is not None)
+    needs_vision = (
+        image_path and
+        settings.vision_model and
+        (ocr_conf < settings.vision_threshold or key_fields_found < 2)
+    )
+
+    if needs_vision:
+        logger.info(f"Vision pass triggered: OCR conf={ocr_conf:.1f}%, "
+                     f"key fields={key_fields_found}/3, threshold={settings.vision_threshold}%")
+        vision_data = await _vision_extract(image_path)
+        if vision_data:
+            data, was_merged = _merge_extractions(data, vision_data)
+            if was_merged:
+                methode = "ollama_vision_merged"
+                result["extrahierte_daten"] = data
+                result["methode"] = methode
+
+    # Auto-Kontierung falls nicht vom LLM geliefert
     if data.get("beleg_typ") and not data.get("skr03_konto"):
         mwst = None
         try:
@@ -593,8 +771,11 @@ async def extract_beleg(ocr_text: str, ocr_data: dict = None) -> dict:
         data.update(kont)
         result["extrahierte_daten"] = data
 
-    # Enrich source spans with bounding boxes from OCR geometry
+    # Re-assess confidence after potential vision merge
     spans = result.get("quellreferenzen", [])
+    result["konfidenz"] = _assess_confidence(data, spans)
+
+    # Enrich source spans with bounding boxes from OCR geometry
     if ocr_data and spans:
         result["quellreferenzen"] = _enrich_spans_with_bboxes(spans, ocr_data)
 

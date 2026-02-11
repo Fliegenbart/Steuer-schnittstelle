@@ -2,7 +2,7 @@
 import os, logging
 from pathlib import Path
 import pytesseract
-from PIL import Image
+from PIL import Image, ImageOps, ImageFilter
 from pdf2image import convert_from_path
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,40 @@ def process_file(file_path: str) -> dict:
     raise ValueError(f"Unsupported file type: {ext}")
 
 
+def _preprocess_image(img: Image.Image) -> Image.Image:
+    """Preprocess image for better OCR on thermal receipts and low-quality scans.
+
+    Steps:
+    1. Grayscale conversion
+    2. Auto-contrast (boosts faded thermal paper)
+    3. Upscale small images (phone photos of receipts)
+    4. Sharpen edges
+    5. Binarize (clean black/white for Tesseract)
+    """
+    # 1. Grayscale
+    if img.mode != 'L':
+        img = img.convert('L')
+
+    # 2. Auto-contrast: stretches histogram, great for faded thermal paper
+    img = ImageOps.autocontrast(img, cutoff=2)
+
+    # 3. Upscale small images (phone photos of receipts are often small)
+    w, h = img.size
+    if w < 1500:
+        scale = 2
+        img = img.resize((w * scale, h * scale), Image.LANCZOS)
+        logger.info(f"Upscaled image from {w}x{h} to {w*scale}x{h*scale}")
+
+    # 4. Sharpen (one pass – sharpens text edges)
+    img = img.filter(ImageFilter.SHARPEN)
+
+    # 5. Binarize: threshold at 140 – forces clean B&W (Tesseract loves this)
+    img = img.point(lambda x: 255 if x > 140 else 0, '1')
+    img = img.convert('L')  # back to grayscale for Tesseract
+
+    return img
+
+
 def _extract_page(img: Image.Image, page_num: int) -> dict:
     """Run image_to_data on a single page/image, return structured word data.
 
@@ -36,8 +70,19 @@ def _extract_page(img: Image.Image, page_num: int) -> dict:
             text: reconstructed text for this page
             confs: list of confidence values (> 0)
     """
-    data = pytesseract.image_to_data(img, lang=LANG, output_type=pytesseract.Output.DICT)
-    width, height = img.size
+    # Store original dimensions (for bbox mapping to original image)
+    orig_width, orig_height = img.size
+
+    # Preprocess for better OCR quality
+    processed = _preprocess_image(img)
+    data = pytesseract.image_to_data(processed, lang=LANG, output_type=pytesseract.Output.DICT)
+
+    # Use original image dimensions for bbox coordinates
+    # Scale factor if image was upscaled during preprocessing
+    proc_width, proc_height = processed.size
+    scale_x = orig_width / proc_width
+    scale_y = orig_height / proc_height
+    width, height = orig_width, orig_height
 
     # Group words by (block_num, line_num) to reconstruct text with proper spacing
     words = []
@@ -49,12 +94,13 @@ def _extract_page(img: Image.Image, page_num: int) -> dict:
         if not txt:
             continue
         conf = int(data["conf"][i])
+        # Scale coordinates back to original image dimensions
         word = {
             "text": txt,
-            "x": int(data["left"][i]),
-            "y": int(data["top"][i]),
-            "w": int(data["width"][i]),
-            "h": int(data["height"][i]),
+            "x": int(data["left"][i] * scale_x),
+            "y": int(data["top"][i] * scale_y),
+            "w": int(data["width"][i] * scale_x),
+            "h": int(data["height"][i] * scale_y),
             "conf": conf,
         }
         block = int(data["block_num"][i])

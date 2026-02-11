@@ -61,7 +61,12 @@ def _run_pipeline(beleg_id: int, db_url: str):
         try:
             loop = asyncio.new_event_loop()
             result = loop.run_until_complete(
-                extraction_service.extract_beleg(ocr_result["text"], ocr_result["data"])
+                extraction_service.extract_beleg(
+                    ocr_result["text"],
+                    ocr_result["data"],
+                    ocr_conf=ocr_result["conf"],
+                    image_path=beleg.dateipfad,
+                )
             )
             loop.close()
 
